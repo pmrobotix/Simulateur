@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>PrincessViewer</title>
+    <title>PMX Viewer</title>
 
-    <link rel="stylesheet" href="css/visualisatorRotated.css">
+    <link rel="stylesheet" href="css/visualisator.css">
 
     <script src="libs/jquery.min.js"></script>
     <script src="libs/createjs.min.js"></script>
@@ -18,8 +18,8 @@
 
 <div class="outsideWrapper">
     <div class="insideWrapper">
-        <img id="table" alt="table" class="coveredImage">
-        <canvas id="canvas" class="coveringCanvas" width="2000" height="3000"></canvas>
+        <img id="table" alt="table" class="coveredImage" style="cursor: pointer; opacity: 0.7;" onclick="toggleZones();" title="Clic pour afficher/masquer les zones">
+        <canvas id="canvas" class="coveringCanvas" width="3000" height="2000"></canvas>
     </div>
 </div>
 
@@ -28,15 +28,33 @@
         <fieldset>
             <legend>Configuration</legend>
             <div>
-                <button onclick="$.getScript(`../resources/${currentYear}/table.json`, function (script) {loadTable(JSON.parse(script), rotateTable); })">Table</button>
+                <button onclick="showZones();">Zones</button>
+                <button onclick="showGrid();">Quadrillage</button>
+            </div>
+            <div style="margin-top:10px;">
+                <label for="tableOpacity">Opacite table : <span id="opacityVal">70%</span></label>
+                <br>
+                <input type="range" id="tableOpacity" min="0" max="100" value="70" style="width:300px;"
+                    oninput="document.getElementById('table').style.opacity = this.value / 100;
+                             document.getElementById('opacityVal').textContent = this.value + '%';">
+            </div>
+            <div style="margin-top:10px;">
+                <label for="zonesOpacity">Opacite zones : <span id="zonesOpacityVal">60%</span></label>
+                <br>
+                <input type="range" id="zonesOpacity" min="0" max="100" value="60" style="width:300px;"
+                    oninput="setZonesOpacity(this.value / 100);
+                             document.getElementById('zonesOpacityVal').textContent = this.value + '%';">
+            </div>
+            <div style="margin-top:10px;">
+                <label for="gridOpacity">Opacite quadrillage : <span id="gridOpacityVal">60%</span></label>
+                <br>
+                <input type="range" id="gridOpacity" min="0" max="100" value="60" style="width:300px;"
+                    oninput="setGridOpacity(this.value / 100);
+                             document.getElementById('gridOpacityVal').textContent = this.value + '%';">
             </div>
             <div>
-                <button onclick="$.getScript(`../resources/${currentYear}/strategyBig0.json`, function (script) {loadSimulatorStrat(JSON.parse(script)); })">Strat Big 0</button>
-                <button onclick="$.getScript(`../resources/${currentYear}/strategyBig3000.json`, function (script) {loadSimulatorStrat(JSON.parse(script)); })">Strat Big 2000</button>
-            </div>
-            <div>
-                <button onclick="$.getScript(`../resources/${currentYear}/strategySmall0.json`, function (script) {loadSimulatorStratPmi(JSON.parse(script)); })">Strat Small 0</button>
-                <button onclick="$.getScript(`../resources/${currentYear}/strategySmall3000.json`, function (script) {loadSimulatorStratPmi(JSON.parse(script)); })">Strat Small 2000</button>
+                <button onclick="loadStratColor('bleu');">Strat Bleu</button>
+                <button onclick="loadStratColor('jaune');">Strat Jaune</button>
             </div>
         </fieldset>
     </div>
@@ -49,12 +67,7 @@
                        id="stratLog" name="stratLog"
                        class="inputfile"
                        data-multiple-caption="{count} files selected"/>
-                <label for="stratLog"><span>Strat Log Princess</span></label>
-                <input type="file"
-                       id="stratPmiLog" name="stratPmiLog"
-                       class="inputfile"
-                       data-multiple-caption="{count} files selected"/>
-                <label for="stratPmiLog"><span>Strat Log PMI</span></label>
+                <label for="stratLog"><span>Strat Log PMX</span></label>
             </div>
 
             <div>
@@ -68,19 +81,16 @@
             <legend>Instructions</legend>
             <table>
                 <tr>
-                    <th>Princess</th>
-                    <th>PMI</th>
+                    <th>PMX</th>
                     <th>Autre</th>
                 </tr>
                 <tr>
-                    <td><button id="princessNext" onclick="nextInstruction();" disabled>Suivant</button></td>
-                    <td><button id="pmiNext" onclick="nextInstructionPmi();" disabled>Suivant</button></td>
+                    <td><button id="pmxNext" onclick="nextInstruction();" disabled>Suivant</button></td>
                     <td><button onclick="connectSocket();">Live</button></td>
                 </tr>
                 <tr>
-                    <td><button id="princessAuto" onclick="autoPlay();" disabled>Automatique</button></td>
-                    <td><button id="pmiAuto" onclick="autoPlayPmi();" disabled>Automatique</button></td>
-                    <td><button onclick="autoPlay();autoPlayPmi();">Full auto</button></td>
+                    <td><button id="pmxAuto" onclick="autoPlay();" disabled>Automatique</button></td>
+                    <td><button onclick="autoPlay();">Full auto</button></td>
                 </tr>
             </table>
 
@@ -90,48 +100,27 @@
             <table>
                 <tr>
                     <th>Robot</th>
-                    <th>X</th>
-                    <th>Y</th>
-                    <th>Theta</th>
+                    <th>X (mm)</th>
+                    <th>Y (mm)</th>
+                    <th>Theta (°)</th>
                     <th></th>
                 </tr>
                 <tr>
-                    <td>Big</td>
+                    <td>PMX</td>
                     <td>
-                        <input style="width: 100px;" name="big-x" id="big-x" type="number"/>
+                        <input style="width: 100px;" name="pmx-x" id="pmx-x" type="number"/>
                     </td>
                     <td>
-                        <input style="width: 100px;" name="big-y" id="big-y" type="number"/>
+                        <input style="width: 100px;" name="pmx-y" id="pmx-y" type="number"/>
                     </td>
                     <td>
-                        <input style="width: 100px;" name="big-theta" id="big-theta" type="number"/>
+                        <input style="width: 100px;" name="pmx-theta" id="pmx-theta" type="number"/>
                     </td>
                     <td>
                         <button style="width: 150px;" onclick="moveRobot(
-                            document.getElementById('big-x').value,
-                            document.getElementById('big-y').value,
-                            document.getElementById('big-theta').value
-                        );">
-                            Go
-                        </button>
-                    </td>
-                </tr>
-                <tr>
-                    <td>Small</td>
-                    <td>
-                        <input style="width: 100px;" name="small-x" id="small-x" type="number"/>
-                    </td>
-                    <td>
-                        <input style="width: 100px;" name="small-y" id="small-y" type="number"/>
-                    </td>
-                    <td>
-                        <input style="width: 100px;" name="small-theta" id="small-theta" type="number"/>
-                    </td>
-                    <td>
-                        <button style="width: 150px;" onclick="movePmi(
-                            document.getElementById('small-x').value,
-                            document.getElementById('small-y').value,
-                            document.getElementById('small-theta').value
+                            document.getElementById('pmx-x').value,
+                            document.getElementById('pmx-y').value,
+                            document.getElementById('pmx-theta').value * Math.PI / 180
                         );">
                             Go
                         </button>
@@ -143,16 +132,10 @@
 
     <table class="dataBlock">
         <tr>
-            <th>Exécution Princess</th>
+            <th>Exécution PMX</th>
         </tr>
         <tr>
             <td id="data" class="dataFieldset"></td>
-        </tr>
-        <tr>
-            <th>Exécution PMI</th>
-        </tr>
-        <tr>
-            <td id="dataPmi" class="dataFieldset"></td>
         </tr>
     </table>
 </div>

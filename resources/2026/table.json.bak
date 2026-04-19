@@ -1,0 +1,67 @@
+{
+  "sizeX": 3000,
+  "sizeY": 2000,
+  "color0": "bleu",
+  "color3000": "jaune",
+  "marge": 180,
+  "_comment": "Convention PMX-CORTEX: X horizontal 0..3000, Y vertical 0..2000, origine bas-gauche. Converti depuis Esial 2026: pmx_x = esial_y, pmx_y = 2000 - esial_x",
+  "forbiddenZones": [
+    {
+      "id": "depart_jaune",
+      "forme": "polygone",
+      "desc": "Depart jaune",
+      "type": "jaune",
+      "points": [
+        {"x": 0, "y": 2000},
+        {"x": 600, "y": 2000},
+        {"x": 600, "y": 1550},
+        {"x": 0, "y": 1550}
+      ]
+    },
+    {
+      "id": "depart_bleu",
+      "forme": "polygone",
+      "desc": "Depart bleu",
+      "type": "bleu",
+      "points": [
+        {"x": 3000, "y": 2000},
+        {"x": 2400, "y": 2000},
+        {"x": 2400, "y": 1550},
+        {"x": 3000, "y": 1550}
+      ]
+    },
+    {
+      "id": "grenier",
+      "forme": "polygone",
+      "desc": "Grenier",
+      "type": "all",
+      "points": [
+        {"x": 600, "y": 2000},
+        {"x": 2400, "y": 2000},
+        {"x": 2400, "y": 1550},
+        {"x": 600, "y": 1550}
+      ]
+    }
+  ],
+  "dynamicZones": [
+    {"id": "caisse_jaune_1",  "forme": "polygone", "desc": "Caisse Jaune 1",  "active": true, "points": [{"x":100,"y":1300},{"x":250,"y":1300},{"x":250,"y":1100},{"x":100,"y":1100}]},
+    {"id": "caisse_jaune_2",  "forme": "polygone", "desc": "Caisse Jaune 2",  "active": true, "points": [{"x":100,"y":500}, {"x":250,"y":500}, {"x":250,"y":300}, {"x":100,"y":300}]},
+    {"id": "caisse_jaune_3",  "forme": "polygone", "desc": "Caisse Jaune 3",  "active": true, "points": [{"x":1050,"y":875},{"x":1250,"y":875},{"x":1250,"y":725},{"x":1050,"y":725}]},
+    {"id": "caisse_jaune_4",  "forme": "polygone", "desc": "Caisse Jaune 4",  "active": true, "points": [{"x":1000,"y":250},{"x":1200,"y":250},{"x":1200,"y":100},{"x":1000,"y":100}]},
+    {"id": "caisse_bleu_1",   "forme": "polygone", "desc": "Caisse Bleu 1",   "active": true, "points": [{"x":2900,"y":1300},{"x":2750,"y":1300},{"x":2750,"y":1100},{"x":2900,"y":1100}]},
+    {"id": "caisse_bleu_2",   "forme": "polygone", "desc": "Caisse Bleu 2",   "active": true, "points": [{"x":2900,"y":500}, {"x":2750,"y":500}, {"x":2750,"y":300}, {"x":2900,"y":300}]},
+    {"id": "caisse_bleu_3",   "forme": "polygone", "desc": "Caisse Bleu 3",   "active": true, "points": [{"x":1950,"y":875},{"x":1750,"y":875},{"x":1750,"y":725},{"x":1950,"y":725}]},
+    {"id": "caisse_bleu_4",   "forme": "polygone", "desc": "Caisse Bleu 4",   "active": true, "points": [{"x":2000,"y":250},{"x":1800,"y":250},{"x":1800,"y":100},{"x":2000,"y":100}]},
+    {"id": "garde_manger_jaune_1", "forme": "polygone", "desc": "Garde manger Jaune 1", "active": true, "points": [{"x":0,"y":900},   {"x":200,"y":900},  {"x":200,"y":700},  {"x":0,"y":700}]},
+    {"id": "garde_manger_jaune_2", "forme": "polygone", "desc": "Garde manger Jaune 2", "active": true, "points": [{"x":600,"y":1400},{"x":800,"y":1400},{"x":800,"y":1200},{"x":600,"y":1200}]},
+    {"id": "garde_manger_jaune_3", "forme": "polygone", "desc": "Garde manger Jaune 3", "active": true, "points": [{"x":700,"y":900}, {"x":900,"y":900}, {"x":900,"y":700}, {"x":700,"y":700}]},
+    {"id": "garde_manger_jaune_4", "forme": "polygone", "desc": "Garde manger Jaune 4", "active": true, "points": [{"x":1150,"y":1550},{"x":1350,"y":1550},{"x":1350,"y":1350},{"x":1150,"y":1350}]},
+    {"id": "garde_manger_bleu_1",  "forme": "polygone", "desc": "Garde manger Bleu 1",  "active": true, "points": [{"x":3000,"y":900},{"x":2800,"y":900},{"x":2800,"y":700},{"x":3000,"y":700}]},
+    {"id": "garde_manger_bleu_2",  "forme": "polygone", "desc": "Garde manger Bleu 2",  "active": true, "points": [{"x":2400,"y":1400},{"x":2200,"y":1400},{"x":2200,"y":1200},{"x":2400,"y":1200}]},
+    {"id": "garde_manger_bleu_3",  "forme": "polygone", "desc": "Garde manger Bleu 3",  "active": true, "points": [{"x":2300,"y":900},{"x":2100,"y":900},{"x":2100,"y":700},{"x":2300,"y":700}]},
+    {"id": "garde_manger_bleu_4",  "forme": "polygone", "desc": "Garde manger Bleu 4",  "active": true, "points": [{"x":1850,"y":1550},{"x":1650,"y":1550},{"x":1650,"y":1350},{"x":1850,"y":1350}]},
+    {"id": "garde_manger_centre_1","forme": "polygone", "desc": "Garde manger Centre 1","active": true, "points": [{"x":1400,"y":900},{"x":1600,"y":900},{"x":1600,"y":700},{"x":1400,"y":700}]},
+    {"id": "garde_manger_centre_2","forme": "polygone", "desc": "Garde manger Centre 2","active": true, "points": [{"x":1400,"y":200},{"x":1600,"y":200},{"x":1600,"y":0},  {"x":1400,"y":0}]}
+  ],
+  "detectionIgnoreZone": []
+}

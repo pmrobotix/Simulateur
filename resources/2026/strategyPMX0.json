@@ -1,0 +1,43 @@
+[
+  {
+    "id": 1,
+    "desc": "Sortie zone de départ",
+    "tasks": [
+      { "type": "ELEMENT", "subtype": "DELETE_ZONE", "item_id": "zone_start", "desc": "Libération zone départ" },
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 500, "position_y": 500, "desc": "Sortie diagonale" }
+    ]
+  },
+  {
+    "id": 2,
+    "desc": "Action 1 : prise simulée vers l'est",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "FACE_TO", "position_x": 700, "position_y": 500, "desc": "Orientation vers la droite" },
+      { "type": "MANIPULATION", "action_id": "ouvrir_pinces", "timeout": 2000 },
+      { "type": "SPEED", "subtype": "SET_SPEED", "speed_percent": 50, "desc": "Vitesse lente" },
+      { "type": "MOVEMENT", "subtype": "LINE", "dist": 100, "desc": "Avance 100mm" },
+      { "type": "MANIPULATION", "action_id": "fermer_pinces", "timeout": 2000 },
+      { "type": "MOVEMENT", "subtype": "LINE", "dist": -100, "desc": "Recul 100mm" },
+      { "type": "SPEED", "subtype": "SET_SPEED", "speed_percent": 100 }
+    ]
+  },
+  {
+    "id": 3,
+    "desc": "Action 2 : prise simulée vers le nord",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "FACE_TO", "position_x": 500, "position_y": 700, "desc": "Orientation vers le haut" },
+      { "type": "MANIPULATION", "action_id": "ouvrir_pinces", "timeout": 2000 },
+      { "type": "MOVEMENT", "subtype": "LINE", "dist": 150, "desc": "Avance 150mm" },
+      { "type": "MANIPULATION", "action_id": "fermer_pinces", "timeout": 2000 },
+      { "type": "WAIT", "duration_ms": 500 },
+      { "type": "MOVEMENT", "subtype": "LINE", "dist": -150, "desc": "Recul 150mm" }
+    ]
+  },
+  {
+    "id": 4,
+    "desc": "Retour zone de départ",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "PATH_TO", "position_x": 300, "position_y": 300, "desc": "Retour (A*)" },
+      { "type": "ELEMENT", "subtype": "ADD_ZONE", "item_id": "zone_start", "desc": "Réactivation zone départ" }
+    ]
+  }
+]
