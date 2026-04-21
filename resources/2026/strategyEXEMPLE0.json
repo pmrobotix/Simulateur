@@ -1,0 +1,97 @@
+[
+  {
+    "id": 1,
+    "desc": "Demarrage : SPEED + ELEMENT + LINE + ROTATE_DEG",
+    "tasks": [
+      { "type": "ELEMENT", "subtype": "DELETE_ZONE", "item_id": "depart_bleu", "desc": "Liberer zone depart" },
+      { "type": "SPEED", "subtype": "SET_SPEED", "speed_percent": 60, "desc": "Vitesse reduite" },
+      { "type": "MOVEMENT", "subtype": "LINE", "dist": 100, "desc": "Avance 100mm (LINE positif)" },
+      { "type": "MOVEMENT", "subtype": "ROTATE_DEG", "angle_deg": -90, "desc": "Tourne -90 (relatif)" }
+    ]
+  },
+  {
+    "id": 2,
+    "desc": "Primitives MOVEMENT directes : GO_TO / MOVE_FORWARD_TO / PATH_TO",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 700, "position_y": 500, "desc": "GO_TO direct" },
+      { "type": "MOVEMENT", "subtype": "MOVE_FORWARD_TO", "position_x": 1100, "position_y": 700, "desc": "MOVE_FORWARD_TO" },
+      { "type": "MOVEMENT", "subtype": "PATH_TO", "position_x": 1500, "position_y": 900, "desc": "PATH_TO (A*)" }
+    ]
+  },
+  {
+    "id": 3,
+    "desc": "Rotations : ROTATE_ABS_DEG / ORBITAL_TURN_DEG / FACE_TO / FACE_BACK_TO",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "ROTATE_ABS_DEG", "angle_deg": 0, "desc": "Rotation absolue 0 (vers +X)" },
+      { "type": "MOVEMENT", "subtype": "ORBITAL_TURN_DEG", "angle_deg": 45, "forward": true, "turn_right": false, "desc": "Orbital +45" },
+      { "type": "MOVEMENT", "subtype": "FACE_TO", "position_x": 2500, "position_y": 1500, "desc": "Face vers (2500,1500)" },
+      { "type": "MOVEMENT", "subtype": "FACE_BACK_TO", "position_x": 2500, "position_y": 1500, "desc": "Dos vers (2500,1500)" }
+    ]
+  },
+  {
+    "id": 4,
+    "desc": "Actionneurs : MANIPULATION + WAIT",
+    "tasks": [
+      { "type": "MANIPULATION", "action_id": "ouvrir_pinces", "timeout": 2000, "desc": "Ouvrir pinces" },
+      { "type": "WAIT", "duration_ms": 500, "desc": "Attente 500ms" },
+      { "type": "MANIPULATION", "action_id": "fermer_pinces", "timeout": 2000, "desc": "Fermer pinces" },
+      { "type": "SPEED", "subtype": "SET_SPEED", "speed_percent": 100, "desc": "Vitesse max" }
+    ]
+  },
+  {
+    "id": 5,
+    "desc": "Composites GO_TO_AND_*",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO_AND_ROTATE_ABS_DEG", "position_x": 2500, "position_y": 1500, "final_angle_deg": 180, "desc": "GO_TO (2500,1500) + rot abs 180" },
+      { "type": "MOVEMENT", "subtype": "GO_TO_AND_ROTATE_REL_DEG", "position_x": 2500, "position_y": 700, "rotate_rel_deg": 90, "desc": "GO_TO (2500,700) + rot rel +90" },
+      { "type": "MOVEMENT", "subtype": "GO_TO_AND_FACE_TO", "position_x": 2000, "position_y": 500, "face_x": 1500, "face_y": 500, "desc": "GO_TO (2000,500) face (1500,500)" },
+      { "type": "MOVEMENT", "subtype": "GO_TO_AND_FACE_BACK_TO", "position_x": 1700, "position_y": 500, "face_x": 1000, "face_y": 500, "desc": "GO_TO (1700,500) dos (1000,500)" }
+    ]
+  },
+  {
+    "id": 6,
+    "desc": "Composites MOVE_FORWARD_TO_AND_*",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "MOVE_FORWARD_TO_AND_ROTATE_ABS_DEG", "position_x": 1400, "position_y": 500, "final_angle_deg": 90, "desc": "MOVE_FWD + rot abs 90" },
+      { "type": "MOVEMENT", "subtype": "MOVE_FORWARD_TO_AND_ROTATE_REL_DEG", "position_x": 1300, "position_y": 800, "rotate_rel_deg": -45, "desc": "MOVE_FWD + rot rel -45" },
+      { "type": "MOVEMENT", "subtype": "MOVE_FORWARD_TO_AND_FACE_TO", "position_x": 1200, "position_y": 1000, "face_x": 1500, "face_y": 1000, "desc": "MOVE_FWD face (1500,1000)" },
+      { "type": "MOVEMENT", "subtype": "MOVE_FORWARD_TO_AND_FACE_BACK_TO", "position_x": 1000, "position_y": 1100, "face_x": 1500, "face_y": 1100, "desc": "MOVE_FWD dos (1500,1100)" }
+    ]
+  },
+  {
+    "id": 7,
+    "desc": "Composites PATH_TO_AND_*",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "PATH_TO_AND_ROTATE_ABS_DEG", "position_x": 800, "position_y": 1300, "final_angle_deg": 180, "desc": "PATH_TO + rot abs 180" },
+      { "type": "MOVEMENT", "subtype": "PATH_TO_AND_ROTATE_REL_DEG", "position_x": 700, "position_y": 1400, "rotate_rel_deg": 45, "desc": "PATH_TO + rot rel +45" },
+      { "type": "MOVEMENT", "subtype": "PATH_TO_AND_FACE_TO", "position_x": 600, "position_y": 1500, "face_x": 300, "face_y": 1500, "desc": "PATH_TO face (300,1500)" },
+      { "type": "MOVEMENT", "subtype": "PATH_TO_AND_FACE_BACK_TO", "position_x": 550, "position_y": 1600, "face_x": 900, "face_y": 1600, "desc": "PATH_TO dos (900,1600)" }
+    ]
+  },
+  {
+    "id": 8,
+    "desc": "Primitives BACK : GO_BACK_TO / MOVE_BACKWARD_TO / PATH_BACK_TO",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_BACK_TO", "position_x": 700, "position_y": 1500, "desc": "GO_BACK_TO" },
+      { "type": "MOVEMENT", "subtype": "MOVE_BACKWARD_TO", "position_x": 800, "position_y": 1300, "desc": "MOVE_BACKWARD_TO" },
+      { "type": "MOVEMENT", "subtype": "PATH_BACK_TO", "position_x": 900, "position_y": 1100, "desc": "PATH_BACK_TO" }
+    ]
+  },
+  {
+    "id": 9,
+    "desc": "MANUAL_PATH + LINE negatif",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "MANUAL_PATH", "waypoints": [[800,900],[600,700],[450,500]], "desc": "MANUAL_PATH 3 waypoints" },
+      { "type": "MOVEMENT", "subtype": "LINE", "dist": -80, "desc": "Recul 80mm (LINE negatif)" }
+    ]
+  },
+  {
+    "id": 10,
+    "desc": "Retour zone initiale + ELEMENT ADD",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "PATH_TO", "position_x": 300, "position_y": 300, "desc": "Retour position initiale (300,300)" },
+      { "type": "MOVEMENT", "subtype": "ROTATE_ABS_DEG", "angle_deg": 90, "desc": "Orientation finale = init (90 deg)" },
+      { "type": "ELEMENT", "subtype": "ADD_ZONE", "item_id": "depart_bleu", "desc": "Reactive zone depart" }
+    ]
+  }
+]
