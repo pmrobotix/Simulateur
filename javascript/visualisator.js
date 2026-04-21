@@ -355,28 +355,221 @@ function initRobot(start) {
  * L'utilisation des fromX/fromY permet d'enchainer correctement les taches
  * meme si un tween precedent est encore en cours (kill + resume from that pose).
  */
-function moveRobot(x, y, rotation, speed, auto = false, strokeColor = 'rgba(255,20,147,1)', fromX, fromY) {
+/**
+ * Dessine une pointe de fleche triangulaire a (x, y) orientee dans la direction
+ * (dirX, dirY) (repere canvas, Y vers le bas). Couleur + taille configurables.
+ */
+function drawArrowHead(x, y, dirX, dirY, color, size) {
+    size = size || 18;
+    var len = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+    dirX /= len; dirY /= len;
+    // Base dir = -tangent (pointe vers l'arriere depuis la pointe)
+    var bx = -dirX, by = -dirY;
+    var c30 = Math.cos(Math.PI / 6), s30 = Math.sin(Math.PI / 6);
+    var vx1 = bx * c30 - by * s30, vy1 = bx * s30 + by * c30;
+    var vx2 = bx * c30 + by * s30, vy2 = -bx * s30 + by * c30;
+    var arrow = new createjs.Shape();
+    arrow.graphics
+        .setStrokeStyle(2).beginStroke(color).beginFill(color)
+        .moveTo(x, y)
+        .lineTo(x + size * vx1, y + size * vy1)
+        .lineTo(x + size * vx2, y + size * vy2)
+        .closePath();
+    stage.addChild(arrow);
+    pathShapes.push(arrow);
+}
+
+/**
+ * Dessine un petit arc + fleche pour visualiser une rotation sur place
+ * (FACE_TO, ROTATE_*). Parametres : centre en coord canvas, angles en rad PMX.
+ * Prend l'arc le plus court (±π). La fleche indique le sens de rotation.
+ */
+function drawRotationArc(cx, cy, thetaStart, thetaEnd, dashed) {
+    var delta = thetaEnd - thetaStart;
+    while (delta > Math.PI) delta -= 2 * Math.PI;
+    while (delta < -Math.PI) delta += 2 * Math.PI;
+    if (Math.abs(delta) < 0.01) return;
+
+    var r = 60;
+    var strokeCol = 'rgba(140,0,200,0.9)';
+    var fillCol = 'rgba(140,0,200,0.25)';
+
+    // Secteur plein (pie slice) : 2 bords radiaux + arc echantillonne
+    var shape = new createjs.Shape();
+    var g = shape.graphics.setStrokeStyle(2);
+    if (dashed) g.setStrokeDash([10, 7]);
+    g.beginStroke(strokeCol).beginFill(fillCol);
+    g.moveTo(cx, cy);
+    g.lineTo(cx + r * Math.cos(thetaStart), cy - r * Math.sin(thetaStart));
+    var N = Math.max(6, Math.floor(Math.abs(delta) * 180 / Math.PI / 5));
+    for (var i = 1; i <= N; i++) {
+        var t = thetaStart + delta * i / N;
+        g.lineTo(cx + r * Math.cos(t), cy - r * Math.sin(t));
+    }
+    g.lineTo(cx, cy);
+    stage.addChild(shape);
+    pathShapes.push(shape);
+
+    // Fleche a l'extremite de l'arc
+    var endT = thetaStart + delta;
+    var endX = cx + r * Math.cos(endT);
+    var endY = cy - r * Math.sin(endT);
+    var tanX = -Math.sin(endT), tanY = -Math.cos(endT);
+    if (delta < 0) { tanX = -tanX; tanY = -tanY; }
+    drawArrowHead(endX, endY, tanX, tanY, strokeCol, 14);
+}
+
+/**
+ * Anime un ORBITAL_TURN_DEG : pivot autour d'une roue (D ou G), le robot
+ * decrit un arc de cercle de rayon = demi-voie. Trace l'arc en points
+ * echantillonnes + chain tween pour l'animation.
+ */
+function playOrbital(task, fromX, fromY, fromTheta, strokeColor, dashed) {
+    var R = 128;
+    var side = task.turn_right ? -1 : 1;
+    var fwd = (task.forward !== false) ? 1 : -1;
+    var pivotX = fromX - side * Math.sin(fromTheta) * R;
+    var pivotY = fromY + side * Math.cos(fromTheta) * R;
+    var totalAngle = (task.angle_deg || 0) * Math.PI / 180 * side * fwd;
+
+    // Echantillonne l'arc en N points pour la polyline + la chain de tweens
+    var N = Math.max(6, Math.floor(Math.abs(totalAngle) * 180 / Math.PI / 5));
+    var pts = [];
+    var rx = fromX - pivotX, ry = fromY - pivotY;
+    for (var i = 1; i <= N; i++) {
+        var a = totalAngle * i / N;
+        var cosA = Math.cos(a), sinA = Math.sin(a);
+        pts.push({
+            x: pivotX + rx * cosA - ry * sinA,
+            y: pivotY + rx * sinA + ry * cosA,
+            theta: fromTheta + a
+        });
+    }
+
+    // Trace polyline (pointillee si task "arriere" = forward:false)
+    var shape = new createjs.Shape();
+    var g = shape.graphics.setStrokeStyle(3);
+    if (dashed) g.setStrokeDash([10, 7]);
+    g.beginStroke(strokeColor);
+    g.moveTo(toCanvasX(fromX), toCanvasY(fromY));
+    pts.forEach(function (p) { g.lineTo(toCanvasX(p.x), toCanvasY(p.y)); });
+    stage.addChild(shape);
+    pathShapes.push(shape);
+    // Fleche a la fin de l'arc
+    if (pts.length >= 2) {
+        var last = pts[pts.length - 1];
+        var prev = pts[pts.length - 2];
+        drawArrowHead(toCanvasX(last.x), toCanvasY(last.y),
+            toCanvasX(last.x) - toCanvasX(prev.x),
+            toCanvasY(last.y) - toCanvasY(prev.y),
+            strokeColor, 16);
+    }
+
+    // Tween chain : on tween conjointement x, y, rotation entre chaque pt
+    createjs.Tween.removeTweens(pmx);
+    pmx.x = toCanvasX(fromX);
+    pmx.y = toCanvasY(fromY);
+    pmx.rotation = toCanvasRotationDeg(fromTheta);
+    stage.update();
+    var tween = createjs.Tween.get(pmx);
+    var segTime = (moveTime + rotationTime) / N;
+    pts.forEach(function (p) {
+        tween = tween.to({
+            x: toCanvasX(p.x),
+            y: toCanvasY(p.y),
+            rotation: toCanvasRotationDeg(p.theta)
+        }, segTime);
+    });
+}
+
+/**
+ * Anime un MANUAL_PATH : pour chaque waypoint, tourne vers la direction du
+ * segment puis avance. Trace aussi la polyline.
+ */
+function playManualPath(waypoints, fromX, fromY, strokeColor) {
+    // Polyline complete
+    var shape = new createjs.Shape();
+    var g = shape.graphics.setStrokeStyle(3).beginStroke(strokeColor);
+    g.moveTo(toCanvasX(fromX), toCanvasY(fromY));
+    waypoints.forEach(function (wp) {
+        g.lineTo(toCanvasX(wp[0]), toCanvasY(wp[1]));
+    });
+    stage.addChild(shape);
+    pathShapes.push(shape);
+
+    createjs.Tween.removeTweens(pmx);
+    pmx.x = toCanvasX(fromX);
+    pmx.y = toCanvasY(fromY);
+    stage.update();
+
+    var tween = createjs.Tween.get(pmx);
+    var prevX = fromX, prevY = fromY;
+    var segMove = moveTime / waypoints.length;
+    waypoints.forEach(function (wp) {
+        var heading = Math.atan2(wp[1] - prevY, wp[0] - prevX);
+        tween = tween
+            .to({ rotation: toCanvasRotationDeg(heading) }, rotationTime, createjs.Ease.getPowInOut(4))
+            .to({ x: toCanvasX(wp[0]), y: toCanvasY(wp[1]) }, segMove, createjs.Ease.getPowInOut(4));
+        // Fleche a chaque waypoint (direction du segment)
+        drawArrowHead(toCanvasX(wp[0]), toCanvasY(wp[1]),
+            toCanvasX(wp[0]) - toCanvasX(prevX),
+            toCanvasY(wp[1]) - toCanvasY(prevY),
+            strokeColor, 16);
+        prevX = wp[0]; prevY = wp[1];
+    });
+}
+
+/**
+ * Deplace le robot avec animation + trace de la ligne.
+ * @param rotation   angle (rad) pendant le deplacement (= heading). Pour un
+ *                   composite _AND_*, c'est la direction du mouvement, pas
+ *                   l'angle final.
+ * @param finalRotation optionnel : angle (rad) a atteindre APRES le mouvement.
+ *                   Si defini, ajoute une 3eme phase de rotation.
+ */
+function moveRobot(x, y, rotation, speed, auto = false, strokeColor = 'rgba(255,20,147,1)', fromX, fromY, finalRotation, dashed, fromTheta) {
     var cx = toCanvasX(x);
     var cy = toCanvasY(y);
     var startX = (fromX !== undefined) ? toCanvasX(fromX) : pmx.x;
     var startY = (fromY !== undefined) ? toCanvasY(fromY) : pmx.y;
+    // Theta de depart : utilise fromTheta (pose logique) si fourni, sinon la
+    // rotation courante de pmx (peut etre stale entre 2 tweens).
+    var startTheta = (fromTheta !== undefined)
+        ? fromTheta
+        : (-pmx.rotation * Math.PI / 180);
 
-    // Trace la ligne du point de depart logique au point d'arrivee.
-    var shape = new createjs.Shape();
-    shape.graphics
-        .setStrokeStyle(3)
-        .beginStroke(strokeColor)
-        .moveTo(startX, startY)
-        .lineTo(cx, cy);
-    stage.addChild(shape);
-    pathShapes.push(shape);
+    // Secteur de pre-rotation : rotation du robot de startTheta vers rotation
+    // (motion heading). Visible si rotation delta notable (tasks de motion ET
+    // pure rotations FACE_*/ROTATE_*).
+    if (Math.abs(rotation - startTheta) > 0.01) {
+        drawRotationArc(startX, startY, startTheta, rotation, dashed);
+    }
+    var hasDisp = (Math.abs(cx - startX) + Math.abs(cy - startY)) > 1;
+    if (hasDisp) {
+        var shape = new createjs.Shape();
+        var gLine = shape.graphics.setStrokeStyle(3);
+        if (dashed) gLine.setStrokeDash([10, 7]);
+        gLine.beginStroke(strokeColor)
+            .moveTo(startX, startY)
+            .lineTo(cx, cy);
+        stage.addChild(shape);
+        pathShapes.push(shape);
+        drawArrowHead(cx, cy, cx - startX, cy - startY, strokeColor, 16);
+        // Secteur de post-rotation (composites : rotation finale apres arrivee)
+        if (finalRotation !== undefined && finalRotation !== null
+                && Math.abs(finalRotation - rotation) > 0.01) {
+            drawRotationArc(cx, cy, rotation, finalRotation, dashed);
+        }
+    }
 
-    // Kill eventuel tween en cours + snap pmx au point de depart logique,
-    // pour que l'animation parte toujours de la pose "fin de task precedente".
+    // Kill eventuel tween en cours + snap pmx au point de depart logique.
     if (fromX !== undefined && fromY !== undefined) {
         createjs.Tween.removeTweens(pmx);
         pmx.x = startX;
         pmx.y = startY;
+        if (fromTheta !== undefined) {
+            pmx.rotation = toCanvasRotationDeg(fromTheta);
+        }
     }
     stage.update();
 
@@ -387,14 +580,23 @@ function moveRobot(x, y, rotation, speed, auto = false, strokeColor = 'rgba(255,
         tMove = speed * 2/3;
     }
 
-    createjs.Tween.get(pmx)
-        .to({rotation: toCanvasRotationDeg(rotation)}, tRotation, createjs.Ease.getPowInOut(4))
-        .to({x: cx, y: cy}, tMove, createjs.Ease.getPowInOut(4))
-        .call(() => {
-            if (auto) {
-                autoPlay();
-            }
-        });
+    // Phases separees : d'abord la rotation vers la heading, PUIS le deplacement.
+    // Sinon le tween combine produirait un crab walk (translation+rotation
+    // simultanees = robot qui pointe dans une direction et avance dans une autre).
+    var tween = createjs.Tween.get(pmx)
+        .to({ rotation: toCanvasRotationDeg(rotation) },
+            tRotation, createjs.Ease.getPowInOut(4))
+        .to({ x: cx, y: cy }, tMove, createjs.Ease.getPowInOut(4));
+    // 3eme phase pour les composites : rotation finale apres arrivee
+    if (finalRotation !== undefined && finalRotation !== null) {
+        tween = tween.to({ rotation: toCanvasRotationDeg(finalRotation) },
+            tRotation, createjs.Ease.getPowInOut(4));
+    }
+    tween.call(() => {
+        if (auto) {
+            autoPlay();
+        }
+    });
 }
 
 /**
@@ -604,11 +806,14 @@ function mirrorTask(task) {
 
     if (st === 'ROTATE_ABS_DEG' && m.angle_deg !== undefined) {
         m.angle_deg = mirrorAngleDegAbs(m.angle_deg);
-    } else if ((st === 'ROTATE_DEG' || st === 'ORBITAL_TURN_DEG') && m.angle_deg !== undefined) {
+    } else if (st === 'ROTATE_DEG' && m.angle_deg !== undefined) {
         m.angle_deg = mirrorAngleDegRel(m.angle_deg);
     }
     if (m.final_angle_deg !== undefined) m.final_angle_deg = mirrorAngleDegAbs(m.final_angle_deg);
     if (m.rotate_rel_deg !== undefined) m.rotate_rel_deg = mirrorAngleDegRel(m.rotate_rel_deg);
+    // ORBITAL_TURN_DEG : le miroir se fait via le flip de turn_right (la roue
+    // pivot passe a l'oppose). NE PAS negater angle_deg en plus (double-negation
+    // annulerait le miroir car side apparait deja dans le calcul worldAngle).
     if (st === 'ORBITAL_TURN_DEG' && m.turn_right !== undefined) m.turn_right = !m.turn_right;
 
     if (Array.isArray(m.waypoints)) {
@@ -821,6 +1026,24 @@ function nextInstruction(auto = false) {
 }
 
 /**
+ * Retourne true si la task est un deplacement ou une rotation "en arriere"
+ * (motion reculee). Utilise pour dessiner en trait pointille.
+ *   GO_BACK_TO, PATH_BACK_TO, MOVE_BACKWARD_TO : deplacement arriere
+ *   FACE_BACK_TO : rotation pour mettre l'arriere face a la cible
+ *   LINE avec dist < 0 : recul
+ *   ORBITAL_TURN_DEG avec forward=false : pivot en arriere
+ */
+function isBackwardTask(task) {
+    if (!task || task.type !== 'MOVEMENT') return false;
+    var st = task.subtype || '';
+    if (st === 'GO_BACK_TO' || st === 'PATH_BACK_TO' || st === 'MOVE_BACKWARD_TO') return true;
+    if (st === 'FACE_BACK_TO') return true;
+    if (st === 'LINE' && (task.dist || 0) < 0) return true;
+    if (st === 'ORBITAL_TURN_DEG' && task.forward === false) return true;
+    return false;
+}
+
+/**
  * Couleur du tracé selon le subtype MOVEMENT
  * Retourne null pour les tasks sans tracé (rotation sur place, non-MOVEMENT).
  */
@@ -895,12 +1118,37 @@ function computeTaskTarget(task, currentX, currentY, currentTheta) {
             return { x: currentX, y: currentY, theta: currentTheta + (task.angle_deg || 0) * d2r };
         case 'ROTATE_ABS_DEG':
             return { x: currentX, y: currentY, theta: (task.angle_deg || 0) * d2r };
-        case 'ORBITAL_TURN_DEG':
-            return { x: currentX, y: currentY, theta: currentTheta + (task.angle_deg || 0) * d2r };
+        case 'ORBITAL_TURN_DEG': {
+            // Pivot sur la roue gauche (turn_right=false) ou droite (turn_right=true).
+            // Demi-voie PMX ~128 mm (cohérent avec drawPmxRobot).
+            var R = 128;
+            var side = task.turn_right ? -1 : 1;    // 1=pivot gauche, -1=pivot droite
+            var fwd = (task.forward !== false) ? 1 : -1;
+            // Pivot en coord world : perpendiculaire a la heading, du cote choisi
+            var pivotX = currentX - side * Math.sin(currentTheta) * R;
+            var pivotY = currentY + side * Math.cos(currentTheta) * R;
+            // Sens de rotation dans le monde : depend de side et forward
+            var worldAngle = (task.angle_deg || 0) * d2r * side * fwd;
+            var cosW = Math.cos(worldAngle), sinW = Math.sin(worldAngle);
+            var rx = currentX - pivotX, ry = currentY - pivotY;
+            return {
+                x: pivotX + rx * cosW - ry * sinW,
+                y: pivotY + rx * sinW + ry * cosW,
+                theta: currentTheta + worldAngle
+            };
+        }
         case 'MANUAL_PATH': {
             if (Array.isArray(task.waypoints) && task.waypoints.length > 0) {
                 var last = task.waypoints[task.waypoints.length - 1];
-                return { x: last[0], y: last[1], theta: currentTheta };
+                // theta final = direction du dernier segment (coherent avec playManualPath
+                // qui oriente le robot selon chaque segment)
+                var prev = task.waypoints.length >= 2
+                    ? task.waypoints[task.waypoints.length - 2]
+                    : [currentX, currentY];
+                return {
+                    x: last[0], y: last[1],
+                    theta: Math.atan2(last[1] - prev[1], last[0] - prev[0])
+                };
             }
             return null;
         }
@@ -1007,16 +1255,52 @@ async function playSimulatorInstruction(task, divId, auto = false) {
         var target = computeTaskTarget(task, playbackPose.x, playbackPose.y, playbackPose.theta);
         if (target !== null) {
             var strokeColor = strokeColorForTask(task);
-            moveRobot(target.x, target.y, target.theta, undefined, false,
-                strokeColor || 'rgba(255,20,147,1)', fromX, fromY);
-            playbackPose = { x: target.x, y: target.y, theta: target.theta };
+            var heading = target.theta;
+            var finalRot;
+            var st = task.subtype || '';
+            var dashed = isBackwardTask(task);
+            // MANUAL_PATH : anime chaque segment separement (rotate+move par
+            // waypoint) pour eviter le crab walk.
+            if (st === 'MANUAL_PATH' && Array.isArray(task.waypoints) && task.waypoints.length > 0) {
+                playManualPath(task.waypoints, fromX, fromY,
+                    strokeColor || 'rgba(255,20,147,1)');
+                var last = task.waypoints[task.waypoints.length - 1];
+                var prev = task.waypoints.length >= 2
+                    ? task.waypoints[task.waypoints.length - 2]
+                    : [fromX, fromY];
+                playbackPose = {
+                    x: last[0], y: last[1],
+                    theta: Math.atan2(last[1] - prev[1], last[0] - prev[0])
+                };
+            } else if (st === 'ORBITAL_TURN_DEG') {
+                playOrbital(task, fromX, fromY, playbackPose.theta,
+                    strokeColor || 'rgba(180,0,255,1)', dashed);
+                playbackPose = { x: target.x, y: target.y, theta: target.theta };
+            } else {
+                if (st.indexOf('_AND_') !== -1) {
+                    var dx = target.x - fromX, dy = target.y - fromY;
+                    heading = Math.atan2(dy, dx);
+                    finalRot = target.theta;
+                }
+                var fromTheta = playbackPose.theta;
+                moveRobot(target.x, target.y, heading, undefined, false,
+                    strokeColor || 'rgba(255,20,147,1)', fromX, fromY, finalRot, dashed, fromTheta);
+                playbackPose = { x: target.x, y: target.y, theta: target.theta };
+            }
         }
     }
 
-    // Pause (WAIT: durée spécifique, sinon pause par défaut d'animation)
+    // Pause adaptee : composites +1 rotation, MANUAL_PATH = N segments
     var delay = (task.type === 'WAIT' && task.duration_ms)
         ? task.duration_ms
         : (moveTime + rotationTime);
+    var st2 = task.subtype || '';
+    if (task.type === 'MOVEMENT' && st2.indexOf('_AND_') !== -1) {
+        delay += rotationTime;
+    } else if (task.type === 'MOVEMENT' && st2 === 'MANUAL_PATH'
+            && Array.isArray(task.waypoints) && task.waypoints.length > 0) {
+        delay = task.waypoints.length * rotationTime + moveTime;
+    }
     await sleep(delay);
 
     // Enchaine uniquement si auto est encore actif (autoPlaying = source verite)

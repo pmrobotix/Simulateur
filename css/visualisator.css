@@ -14,6 +14,7 @@ body {
 .belowCanvasRow {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;                    /* wrap si depassement horizontal */
     justify-content: flex-start;
     align-items: flex-start;
     gap: 6px;
@@ -57,6 +58,33 @@ body {
     color: #aaa;
     margin: 0 4px;
 }
+/* Tous les boutons de la 1ere ligne Strategies : meme hauteur fixe */
+.stratRow button,
+.stratRow input[type="file"] + label {
+    height: 28px;
+    box-sizing: border-box;
+    line-height: 1;
+    padding: 2px 8px;
+}
+/* Legende couleurs compacte */
+.legendColors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    font-size: 13px;
+    padding: 4px 8px;
+}
+.legendColors .legendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.legendColors .legendSwatch {
+    display: inline-block;
+    width: 20px;
+    height: 3px;
+    vertical-align: middle;
+}
 .playBtnsStack {
     display: flex;
     flex-direction: column;
@@ -79,6 +107,8 @@ body {
     flex: 0 0 auto;
     height: 100vh;                      /* pleine hauteur fenetre, independant */
     box-sizing: border-box;
+    position: sticky;                   /* reste visible lors du scroll page */
+    top: 0;
 }
 #fitBtn {
     font-size: 16px;
@@ -143,8 +173,18 @@ body {
 }
 .btnStratBleu:disabled,
 .btnStratJaune:disabled {
-    opacity: 0.45;
+    opacity: 0.35;
     cursor: not-allowed;
+    background: #ccc !important;
+    color: #888 !important;
+    border-color: #bbb !important;
+    box-shadow: none !important;
+}
+/* Couleur NON selectionnee quand une strat est chargee : grisee mais cliquable */
+.btnStratBleu:not(:disabled):not(.active),
+.btnStratJaune:not(:disabled):not(.active) {
+    opacity: 0.45;
+    filter: grayscale(0.85);
 }
 
 /* Panneau lateral editeur de strategie (droite du terrain, symetrique du log) */
@@ -161,8 +201,10 @@ body {
     min-width: 300px;
     min-height: 300px;
     flex: 0 0 auto;
-    align-self: flex-start;       /* independant de la taille des siblings */
+    align-self: flex-start;
     background: #fafafa;
+    position: sticky;             /* reste visible lors du scroll page */
+    top: 0;
 }
 #editorSidePanel .logHeader {
     flex: 0 0 auto;
@@ -231,7 +273,8 @@ body {
     min-height: 200px;
     flex: 0 0 auto;
     align-self: flex-start;
-    position: relative;          /* contexte pour la poignee de redim */
+    position: sticky;            /* reste visible lors du scroll page */
+    top: 0;
 }
 /* Poignee de redimensionnement sur toute la hauteur du bord droit */
 .sideResizer {

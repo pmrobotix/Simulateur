@@ -16,8 +16,7 @@ window.editor = {
         instructions: []          // [{ id, desc, tasks: [...] }, ...] — état partagé édition/lecture
     },
     initialPose: { x: 300, y: 300, theta: Math.PI / 2 },
-    currentInstructionIdx: 0,
-    selectedTaskRef: null,        // { iInstr, iTask }
+    selectedTaskRef: null,        // { iInstr, iTask } ; iTask peut etre null pour "instruction seule selectionnee"
     _layer: null,                 // createjs.Container pour le rendu edition
     // Nom du fichier utilisateur charge (juste pour l'affichage ; le contenu
     // est dans `strategy.instructions` ci-dessus)
@@ -25,7 +24,9 @@ window.editor = {
     // true = modifie depuis le dernier load/export (indicateur ●)
     dirty: false,
     // true = editor layer toujours visible (bouton "Dessiner strat")
-    previewAlways: false
+    previewAlways: false,
+    // true = dessine un encadre autour des taches de chaque instruction
+    showInstrBounds: false
 };
 
 function editorMarkDirty() {
@@ -239,6 +240,19 @@ function editorToggleDrawStrat() {
 }
 
 /**
+ * Toggle affichage des encadres autour des taches de chaque instruction.
+ */
+function editorToggleInstrBounds() {
+    window.editor.showInstrBounds = !window.editor.showInstrBounds;
+    var btn = document.getElementById('btnInstrBounds');
+    if (btn) {
+        btn.style.backgroundColor = window.editor.showInstrBounds ? '#4caf50' : '';
+        btn.style.color = window.editor.showInstrBounds ? 'white' : '';
+    }
+    editorRenderLayer();
+}
+
+/**
  * Rafraichit les inputs x/y/theta de la pose initiale depuis le state.
  */
 function editorRefreshInitialPoseInputs() {
@@ -338,21 +352,7 @@ function editorHandleCanvasClick(pmxX, pmxY) {
 // ============================================================================
 
 /**
- * Renvoie l'instruction courante (la cree si necessaire).
- */
-function editorEnsureCurrentInstruction() {
-    var s = window.editor.strategy;
-    if (s.instructions.length === 0) {
-        editorAddInstruction();
-    }
-    if (window.editor.currentInstructionIdx >= s.instructions.length) {
-        window.editor.currentInstructionIdx = s.instructions.length - 1;
-    }
-    return s.instructions[window.editor.currentInstructionIdx];
-}
-
-/**
- * Cree une nouvelle instruction vide et la definit comme courante.
+ * Cree une nouvelle instruction vide et la selectionne (iTask: null).
  */
 function editorAddInstruction() {
     var s = window.editor.strategy;
@@ -364,7 +364,7 @@ function editorAddInstruction() {
         desc: 'Instruction ' + nextId,
         tasks: []
     });
-    window.editor.currentInstructionIdx = s.instructions.length - 1;
+    window.editor.selectedTaskRef = { iInstr: s.instructions.length - 1, iTask: null };
     editorMarkDirty();
     editorRenderInstructionsList();
 }
@@ -373,26 +373,33 @@ function editorAddInstruction() {
  * Ajoute une task a l'instruction courante.
  */
 function editorAppendTask(task) {
+    var s = window.editor.strategy;
     var sel = window.editor.selectedTaskRef;
-    // Option B : si une task est selectionnee, on insere la nouvelle JUSTE APRES
-    // dans la meme instruction. Sinon, append a la fin de l'instruction courante.
-    if (sel) {
-        var instrSel = window.editor.strategy.instructions[sel.iInstr];
-        if (instrSel && Array.isArray(instrSel.tasks)) {
-            instrSel.tasks.splice(sel.iTask + 1, 0, task);
-            window.editor.selectedTaskRef = { iInstr: sel.iInstr, iTask: sel.iTask + 1 };
-            window.editor.currentInstructionIdx = sel.iInstr;
+    if (sel && sel.iInstr != null) {
+        var instr = s.instructions[sel.iInstr];
+        if (instr && Array.isArray(instr.tasks)) {
+            if (sel.iTask != null) {
+                // Task selectionnee : insertion APRES
+                instr.tasks.splice(sel.iTask + 1, 0, task);
+                window.editor.selectedTaskRef = { iInstr: sel.iInstr, iTask: sel.iTask + 1 };
+            } else {
+                // Instruction seule selectionnee : append a la fin de cette instruction
+                instr.tasks.push(task);
+                window.editor.selectedTaskRef = { iInstr: sel.iInstr, iTask: instr.tasks.length - 1 };
+            }
             editorMarkDirty();
             editorRenderInstructionsList();
             return;
         }
     }
-    var instr = editorEnsureCurrentInstruction();
-    instr.tasks.push(task);
-    window.editor.selectedTaskRef = {
-        iInstr: window.editor.currentInstructionIdx,
-        iTask: instr.tasks.length - 1
-    };
+    // Aucune selection : append a la derniere instruction (cree une si aucune)
+    if (s.instructions.length === 0) {
+        editorAddInstruction();
+    }
+    var lastIdx = s.instructions.length - 1;
+    var lastInstr = s.instructions[lastIdx];
+    lastInstr.tasks.push(task);
+    window.editor.selectedTaskRef = { iInstr: lastIdx, iTask: lastInstr.tasks.length - 1 };
     editorMarkDirty();
     editorRenderInstructionsList();
 }
@@ -435,10 +442,10 @@ function editorAddNonClickTask(kind) {
 }
 
 /**
- * Definit l'instruction courante (celle qui accueille les prochaines tasks).
+ * Selectionne une instruction (sans task interne). iTask = null.
  */
 function editorSetCurrentInstruction(idx) {
-    window.editor.currentInstructionIdx = idx;
+    window.editor.selectedTaskRef = { iInstr: idx, iTask: null };
     editorRenderInstructionsList();
 }
 
@@ -462,18 +469,32 @@ function editorRenderInstructionsList() {
     var sel = window.editor.selectedTaskRef;
     var html = '';
     s.instructions.forEach(function (instr, iInstr) {
-        var isCurrent = (iInstr === window.editor.currentInstructionIdx);
-        html += '<div class="editorInstruction" style="margin-top:2px; border:1px solid #999; padding:4px;">';
-        html += '<div style="font-weight:bold;">';
+        var isSelInstr = sel && sel.iInstr === iInstr;
+        var borderColor = isSelInstr ? '#4caf50' : '#999';
+        var borderWidth = isSelInstr ? '3px' : '1px';
+        var bgColor = isSelInstr ? '#f1fff1' : 'transparent';
+        html += '<div class="editorInstruction" style="margin-top:2px; border:' + borderWidth + ' solid ' + borderColor + '; padding:4px; background:' + bgColor + ';" data-instr-header="' + iInstr + '">';
+        html += '<div style="font-weight:bold; cursor:pointer;" title="Cliquer pour selectionner cette instruction (les prochaines tasks y seront ajoutees)">';
         html += '#' + (instr.id || (iInstr + 1)) + ' ';
         html += '<input type="text" data-instr-desc="' + iInstr + '" value="' + editorEscapeAttr(instr.desc || '') + '" style="width:280px; font-size:20px;"/>';
-        if (isCurrent) html += ' <span style="color:#4caf50;">[courante]</span>';
-        else html += ' <button type="button" style="font-size:18px;" data-set-current="' + iInstr + '">choisir</button>';
         // Controles instruction
         html += ' <button type="button" style="font-size:18px;" data-move-instr-up="' + iInstr + '" title="Monter">&#9650;</button>';
         html += ' <button type="button" style="font-size:18px;" data-move-instr-down="' + iInstr + '" title="Descendre">&#9660;</button>';
         html += ' <button type="button" style="font-size:18px;" data-delete-instr="' + iInstr + '" title="Supprimer l\'instruction">&#128465;</button>';
         html += '</div>';
+
+        // Champs optionnels (format JSON §2.2 : points, priority, estimatedDurationSec, flags)
+        html += '<details style="margin:2px 0 2px 8px; font-size:13px;">';
+        html += '<summary style="cursor:pointer; color:#666;">Meta (points/priority/flags)</summary>';
+        html += '<div style="padding:2px 6px; display:flex; flex-wrap:wrap; gap:4px 8px;">';
+        html += '<label title="Points attendus si succes">points: <input type="number" style="width:60px;" data-instr-meta="points:' + iInstr + '" value="' + editorEscapeAttr(instr.points != null ? instr.points : '') + '"/></label>';
+        html += '<label title="Priorite (plus eleve = choisi en premier)">priority: <input type="number" style="width:60px;" data-instr-meta="priority:' + iInstr + '" value="' + editorEscapeAttr(instr.priority != null ? instr.priority : '') + '"/></label>';
+        html += '<label title="Duree estimee en secondes (pour gestion du temps restant)">estDur: <input type="number" step="0.5" style="width:60px;" data-instr-meta="estimatedDurationSec:' + iInstr + '" value="' + editorEscapeAttr(instr.estimatedDurationSec != null ? instr.estimatedDurationSec : '') + '"/></label>';
+        html += '<label title="Flag requis pour que l\'instruction s\'execute (skip sinon)">needed_flag: <input type="text" style="width:120px;" data-instr-meta="needed_flag:' + iInstr + '" value="' + editorEscapeAttr(instr.needed_flag || '') + '"/></label>';
+        html += '<label title="Flag leve apres succes de l\'instruction">action_flag: <input type="text" style="width:120px;" data-instr-meta="action_flag:' + iInstr + '" value="' + editorEscapeAttr(instr.action_flag || '') + '"/></label>';
+        html += '<label title="Flags a effacer apres succes (separes par virgule)">clear_flags: <input type="text" style="width:160px;" data-instr-meta="clear_flags:' + iInstr + '" value="' + editorEscapeAttr(Array.isArray(instr.clear_flags) ? instr.clear_flags.join(',') : '') + '"/></label>';
+        html += '</div></details>';
+
         html += '<ul style="margin:2px 0 0 20px;">';
         instr.tasks.forEach(function (task, iTask) {
             var isSel = sel && sel.iInstr === iInstr && sel.iTask === iTask;
@@ -497,6 +518,17 @@ function editorRenderInstructionsList() {
         });
     });
 
+    // Clic sur l'en-tete d'une instruction : la marque comme courante. Ignore
+    // les clics sur input / button (qui ont leurs propres handlers).
+    container.querySelectorAll('[data-instr-header]').forEach(function (el) {
+        el.addEventListener('click', function (ev) {
+            if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'BUTTON') return;
+            // Ne pas reagir aux clics sur la liste des tasks en dessous
+            if (ev.target.closest && ev.target.closest('.editorTaskItem')) return;
+            editorSetCurrentInstruction(parseInt(this.dataset.instrHeader, 10));
+        });
+    });
+
     // Edition inline du desc d'une instruction
     container.querySelectorAll('[data-instr-desc]').forEach(function (inp) {
         inp.addEventListener('input', function () {
@@ -505,6 +537,30 @@ function editorRenderInstructionsList() {
                 window.editor.strategy.instructions[i].desc = this.value;
                 editorMarkDirty();
             }
+        });
+    });
+
+    // Edition des champs meta d'une instruction (points, priority, flags)
+    container.querySelectorAll('[data-instr-meta]').forEach(function (inp) {
+        inp.addEventListener('input', function () {
+            var parts = this.dataset.instrMeta.split(':');
+            var field = parts[0];
+            var i = parseInt(parts[1], 10);
+            var instr = window.editor.strategy.instructions[i];
+            if (!instr) return;
+            var val = this.value;
+            if (field === 'points' || field === 'priority' || field === 'estimatedDurationSec') {
+                if (val === '') { delete instr[field]; }
+                else { var n = parseFloat(val); instr[field] = isNaN(n) ? val : n; }
+            } else if (field === 'clear_flags') {
+                if (val.trim() === '') { delete instr[field]; }
+                else { instr[field] = val.split(',').map(function (s) { return s.trim(); }).filter(Boolean); }
+            } else {
+                // needed_flag, action_flag
+                if (val.trim() === '') { delete instr[field]; }
+                else { instr[field] = val; }
+            }
+            editorMarkDirty();
         });
     });
 
@@ -846,12 +902,6 @@ function editorMoveInstruction(iInstr, dir) {
     var tmp = arr[iInstr];
     arr[iInstr] = arr[j];
     arr[j] = tmp;
-    // Maj currentInstructionIdx si necessaire
-    if (window.editor.currentInstructionIdx === iInstr) {
-        window.editor.currentInstructionIdx = j;
-    } else if (window.editor.currentInstructionIdx === j) {
-        window.editor.currentInstructionIdx = iInstr;
-    }
     var sel = window.editor.selectedTaskRef;
     if (sel) {
         if (sel.iInstr === iInstr) sel.iInstr = j;
@@ -873,11 +923,6 @@ function editorDeleteInstruction(iInstr) {
                 + ' et ses ' + instr.tasks.length + ' task(s) ?')) return;
     }
     arr.splice(iInstr, 1);
-    // Maj currentInstructionIdx
-    if (window.editor.currentInstructionIdx >= arr.length) {
-        window.editor.currentInstructionIdx = Math.max(0, arr.length - 1);
-    }
-    // Deselectionne si la task ciblait cette instruction
     var sel = window.editor.selectedTaskRef;
     if (sel) {
         if (sel.iInstr === iInstr) window.editor.selectedTaskRef = null;
@@ -922,8 +967,12 @@ function editorRenderLayer() {
     // Parcours des instructions et simulation de la pose (miroirisee si jaune)
     var x = p0x, y = p0y, theta = p0theta;
     void p0theta;
-    window.editor.strategy.instructions.forEach(function (instr) {
+    window.editor.strategy.instructions.forEach(function (instr, instrIdx) {
         if (!Array.isArray(instr.tasks)) return;
+        // Tracking bounding box de l'instruction si l'option encadres est on
+        var bb = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity, has: false };
+        bb.x1 = Math.min(bb.x1, x); bb.y1 = Math.min(bb.y1, y);
+        bb.x2 = Math.max(bb.x2, x); bb.y2 = Math.max(bb.y2, y); bb.has = true;
         instr.tasks.forEach(function (task) {
             var usedTask = mirror ? mirrorTask(task) : task;
             var fromX = x, fromY = y;
@@ -934,17 +983,53 @@ function editorRenderLayer() {
                 var color = (typeof strokeColorForTask === 'function')
                     ? strokeColorForTask(usedTask)
                     : null;
-                if (color && usedTask.type === 'MOVEMENT') {
-                    editorDrawSegment(layer, fromX, fromY, target.x, target.y,
-                                      color, usedTask.subtype);
+                var isMovement = usedTask.type === 'MOVEMENT';
+                var st2 = usedTask.subtype || '';
+                var rotDashed = (typeof isBackwardTask === 'function') && isBackwardTask(usedTask);
+
+                if (isMovement && st2 !== 'ORBITAL_TURN_DEG' && st2 !== 'MANUAL_PATH') {
+                    // Heading pendant le mouvement : atan2 pour composites, sinon target.theta
+                    var heading;
+                    if (st2.indexOf('_AND_') !== -1) {
+                        heading = Math.atan2(target.y - fromY, target.x - fromX);
+                    } else {
+                        heading = target.theta;
+                    }
+                    // Secteur de pre-rotation (rotation au depart)
+                    if (Math.abs(heading - theta) > 0.01) {
+                        editorDrawRotationSector(layer, fromX, fromY, theta, heading, rotDashed);
+                    }
+                    // Trait / arc (si couleur disponible = tache avec deplacement visible)
+                    if (color) {
+                        editorDrawSegment(layer, fromX, fromY, target.x, target.y,
+                                          color, st2, usedTask, theta);
+                    }
+                    // Secteur de post-rotation (composites : rotation finale apres move)
+                    if (st2.indexOf('_AND_') !== -1
+                            && Math.abs(target.theta - heading) > 0.01) {
+                        editorDrawRotationSector(layer, target.x, target.y,
+                            heading, target.theta, rotDashed);
+                    }
+                } else if (isMovement && (st2 === 'ORBITAL_TURN_DEG' || st2 === 'MANUAL_PATH')) {
+                    // Orbital et manual path dessinent leur arc/polyline en interne
+                    if (color) {
+                        editorDrawSegment(layer, fromX, fromY, target.x, target.y,
+                                          color, st2, usedTask, theta);
+                    }
                 }
                 x = target.x; y = target.y; theta = target.theta;
+                bb.x1 = Math.min(bb.x1, x); bb.y1 = Math.min(bb.y1, y);
+                bb.x2 = Math.max(bb.x2, x); bb.y2 = Math.max(bb.y2, y);
             }
-            // Pastille pour les tasks non-MOVEMENT (MANIPULATION/WAIT/SPEED/ELEMENT)
             if (usedTask.type && usedTask.type !== 'MOVEMENT') {
                 editorDrawBadge(layer, x, y, editorBadgeLetter(usedTask));
             }
         });
+        // Trace encadre de l'instruction si option activee
+        if (window.editor.showInstrBounds && bb.has && bb.x1 < bb.x2) {
+            var label = '#' + (instr.id || (instrIdx + 1)) + ' ' + (instr.desc || '');
+            editorDrawInstrBox(layer, bb.x1, bb.y1, bb.x2, bb.y2, label, instrIdx);
+        }
     });
 
     stage.update();
@@ -952,26 +1037,200 @@ function editorRenderLayer() {
 
 /**
  * Trace un segment entre deux points PMX avec la couleur de la task.
+ * Pour ORBITAL_TURN_DEG : trace l'arc autour de la roue pivot.
+ * Pour les autres subtypes : ligne droite + fleche a l'arrivee.
  * Styles spec dash : GO_BACK_TO / PATH_BACK_TO en pointille.
  */
-function editorDrawSegment(layer, fromX, fromY, toX, toY, color, subtype) {
-    var shape = new createjs.Shape();
-    var g = shape.graphics.setStrokeStyle(4);
-    if (subtype === 'GO_BACK_TO' || subtype === 'PATH_BACK_TO') {
-        g.setStrokeDash([8, 6]);
+function editorDrawSegment(layer, fromX, fromY, toX, toY, color, subtype, task, fromTheta) {
+    var dashed = (typeof isBackwardTask === 'function') && task && isBackwardTask(task);
+    // ORBITAL : trace l'arc echantillonne autour du pivot
+    if (subtype === 'ORBITAL_TURN_DEG' && task) {
+        editorDrawOrbitalArc(layer, fromX, fromY, fromTheta, task, color, dashed);
+        return;
     }
+    // MANUAL_PATH : trace la polyline complete (pas juste ligne directe) + fleche par segment
+    if (subtype === 'MANUAL_PATH' && task && Array.isArray(task.waypoints) && task.waypoints.length > 0) {
+        var shape = new createjs.Shape();
+        var gp = shape.graphics.setStrokeStyle(3);
+        if (dashed) gp.setStrokeDash([10, 7]);
+        gp.beginStroke(color).moveTo(toCanvasX(fromX), toCanvasY(fromY));
+        var prevWpX = fromX, prevWpY = fromY;
+        task.waypoints.forEach(function (wp) {
+            gp.lineTo(toCanvasX(wp[0]), toCanvasY(wp[1]));
+            prevWpX = wp[0]; prevWpY = wp[1];
+        });
+        layer.addChild(shape);
+        // Fleche a chaque waypoint
+        prevWpX = fromX; prevWpY = fromY;
+        task.waypoints.forEach(function (wp) {
+            editorDrawLayerArrow(layer, toCanvasX(wp[0]), toCanvasY(wp[1]),
+                toCanvasX(wp[0]) - toCanvasX(prevWpX),
+                toCanvasY(wp[1]) - toCanvasY(prevWpY),
+                color, 16);
+            prevWpX = wp[0]; prevWpY = wp[1];
+        });
+        return;
+    }
+
+    var shape = new createjs.Shape();
+    var g = shape.graphics.setStrokeStyle(3);
+    if (dashed) g.setStrokeDash([10, 7]);
     g.beginStroke(color)
         .moveTo(toCanvasX(fromX), toCanvasY(fromY))
         .lineTo(toCanvasX(toX), toCanvasY(toY));
     layer.addChild(shape);
 
-    // Petit rond a l'arrivee pour reperer la pose
-    var dot = new createjs.Shape();
-    dot.graphics
-        .setStrokeStyle(2).beginStroke(color)
-        .beginFill('white')
-        .drawCircle(toCanvasX(toX), toCanvasY(toY), 6);
-    layer.addChild(dot);
+    // Fleche a l'arrivee (direction du deplacement)
+    var dxCanvas = toCanvasX(toX) - toCanvasX(fromX);
+    var dyCanvas = toCanvasY(toY) - toCanvasY(fromY);
+    if (Math.abs(dxCanvas) + Math.abs(dyCanvas) > 1) {
+        editorDrawLayerArrow(layer, toCanvasX(toX), toCanvasY(toY),
+            dxCanvas, dyCanvas, color, 16);
+    }
+}
+
+/**
+ * Trace l'arc orbital pour l'apercu editor. Meme math que playOrbital cote
+ * visualisator.js (demi-voie 128 mm, direction selon side + forward).
+ */
+function editorDrawOrbitalArc(layer, fromX, fromY, fromTheta, task, color, dashed) {
+    var R = 128;
+    var side = task.turn_right ? -1 : 1;
+    var fwd = (task.forward !== false) ? 1 : -1;
+    var pivotX = fromX - side * Math.sin(fromTheta) * R;
+    var pivotY = fromY + side * Math.cos(fromTheta) * R;
+    var totalAngle = (task.angle_deg || 0) * Math.PI / 180 * side * fwd;
+    var N = Math.max(6, Math.floor(Math.abs(totalAngle) * 180 / Math.PI / 5));
+
+    var shape = new createjs.Shape();
+    var g = shape.graphics.setStrokeStyle(3);
+    if (dashed) g.setStrokeDash([10, 7]);
+    g.beginStroke(color);
+    g.moveTo(toCanvasX(fromX), toCanvasY(fromY));
+    var rx = fromX - pivotX, ry = fromY - pivotY;
+    var lastX = fromX, lastY = fromY;
+    for (var i = 1; i <= N; i++) {
+        var a = totalAngle * i / N;
+        var cosA = Math.cos(a), sinA = Math.sin(a);
+        var px = pivotX + rx * cosA - ry * sinA;
+        var py = pivotY + rx * sinA + ry * cosA;
+        g.lineTo(toCanvasX(px), toCanvasY(py));
+        lastX = px; lastY = py;
+    }
+    layer.addChild(shape);
+
+    // Fleche a la fin de l'arc (direction tangente)
+    var preA = totalAngle * (N - 1) / N;
+    var preX = pivotX + rx * Math.cos(preA) - ry * Math.sin(preA);
+    var preY = pivotY + rx * Math.sin(preA) + ry * Math.cos(preA);
+    editorDrawLayerArrow(layer,
+        toCanvasX(lastX), toCanvasY(lastY),
+        toCanvasX(lastX) - toCanvasX(preX),
+        toCanvasY(lastY) - toCanvasY(preY),
+        color, 16);
+}
+
+/**
+ * Dessine un secteur circulaire plein pour visualiser une rotation sur place
+ * (FACE_TO, FACE_BACK_TO, ROTATE_DEG, ROTATE_ABS_DEG). Rayon 60mm, fill
+ * violet translucide + outline violet + fleche a l'extremite de l'arc.
+ */
+function editorDrawRotationSector(layer, cx, cy, thetaStart, thetaEnd, dashed) {
+    var delta = thetaEnd - thetaStart;
+    while (delta > Math.PI) delta -= 2 * Math.PI;
+    while (delta < -Math.PI) delta += 2 * Math.PI;
+    if (Math.abs(delta) < 0.01) return;
+
+    var r = 60;
+    var ccx = toCanvasX(cx), ccy = toCanvasY(cy);
+    var strokeCol = 'rgba(140,0,200,0.9)';
+    var fillCol = 'rgba(140,0,200,0.25)';
+
+    var shape = new createjs.Shape();
+    var g = shape.graphics.setStrokeStyle(2);
+    if (dashed) g.setStrokeDash([8, 5]);
+    g.beginStroke(strokeCol).beginFill(fillCol);
+    g.moveTo(ccx, ccy);
+    // Bord radial initial
+    g.lineTo(ccx + r * Math.cos(thetaStart), ccy - r * Math.sin(thetaStart));
+    // Arc echantillonne
+    var N = Math.max(6, Math.floor(Math.abs(delta) * 180 / Math.PI / 5));
+    for (var i = 1; i <= N; i++) {
+        var t = thetaStart + delta * i / N;
+        g.lineTo(ccx + r * Math.cos(t), ccy - r * Math.sin(t));
+    }
+    // Fermeture vers centre
+    g.lineTo(ccx, ccy);
+    layer.addChild(shape);
+
+    // Fleche a l'extremite de l'arc
+    var endT = thetaStart + delta;
+    var endX = ccx + r * Math.cos(endT);
+    var endY = ccy - r * Math.sin(endT);
+    var tanX = -Math.sin(endT), tanY = -Math.cos(endT);
+    if (delta < 0) { tanX = -tanX; tanY = -tanY; }
+    editorDrawLayerArrow(layer, endX, endY, tanX, tanY, strokeCol, 14);
+}
+
+/**
+ * Dessine un rectangle encadrant toutes les positions de l'instruction +
+ * un label (id + desc) en haut. Couleur cyclique selon l'index.
+ */
+function editorDrawInstrBox(layer, x1, y1, x2, y2, label, instrIdx) {
+    var palette = [
+        'rgba(0,120,255,0.9)',
+        'rgba(255,120,0,0.9)',
+        'rgba(0,160,80,0.9)',
+        'rgba(200,0,160,0.9)',
+        'rgba(120,80,40,0.9)',
+        'rgba(0,160,180,0.9)'
+    ];
+    var col = palette[instrIdx % palette.length];
+    var pad = 30;
+    var cx1 = toCanvasX(x1 - pad);
+    var cy1 = toCanvasY(y2 + pad);     // y2 = max Y PMX -> min Y canvas (Y inverse)
+    var cx2 = toCanvasX(x2 + pad);
+    var cy2 = toCanvasY(y1 - pad);
+    var w = cx2 - cx1;
+    var h = cy2 - cy1;
+
+    var shape = new createjs.Shape();
+    shape.graphics
+        .setStrokeStyle(2).setStrokeDash([6, 4]).beginStroke(col)
+        .drawRect(cx1, cy1, w, h);
+    layer.addChild(shape);
+
+    // Label en haut a gauche du box
+    var txt = new createjs.Text(label, 'bold 18px Arial', col);
+    txt.x = cx1 + 4;
+    txt.y = cy1 + 2;
+    var txtBg = new createjs.Shape();
+    txtBg.graphics
+        .beginFill('rgba(255,255,255,0.85)')
+        .drawRect(cx1 + 2, cy1 + 2, Math.min(w - 4, txt.getMeasuredWidth() + 6), 22);
+    layer.addChild(txtBg);
+    layer.addChild(txt);
+}
+
+/**
+ * Dessine une pointe de fleche triangulaire dans la layer editeur.
+ */
+function editorDrawLayerArrow(layer, x, y, dirX, dirY, color, size) {
+    size = size || 16;
+    var len = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+    dirX /= len; dirY /= len;
+    var bx = -dirX, by = -dirY;
+    var c30 = Math.cos(Math.PI / 6), s30 = Math.sin(Math.PI / 6);
+    var vx1 = bx * c30 - by * s30, vy1 = bx * s30 + by * c30;
+    var vx2 = bx * c30 + by * s30, vy2 = -bx * s30 + by * c30;
+    var arrow = new createjs.Shape();
+    arrow.graphics
+        .setStrokeStyle(2).beginStroke(color).beginFill(color)
+        .moveTo(x, y)
+        .lineTo(x + size * vx1, y + size * vy1)
+        .lineTo(x + size * vx2, y + size * vy2)
+        .closePath();
+    layer.addChild(arrow);
 }
 
 /**
@@ -1062,11 +1321,14 @@ function editorOnLoadStratFile(ev) {
         var base = file.name.replace(/\.json$/i, '');
         window.editor.strategy.name = base.replace(/^strategy/i, '') || 'PMX0';
         window.editor.loadedStratFileName = file.name;
-        window.editor.currentInstructionIdx = Math.max(0, data.length - 1);
         window.editor.selectedTaskRef = null;
         window.editor.dirty = false;
         var nameInput = document.getElementById('editorStratName');
         if (nameInput) nameInput.value = window.editor.strategy.name;
+        // Prepare playback en bleu (Suivant/Auto se debloquent)
+        if (typeof loadSimulatorStrat === 'function') {
+            loadSimulatorStrat(JSON.parse(JSON.stringify(data)));
+        }
         editorUpdateLoadedSlotUi();
         editorRenderInstructionsList();
     };
@@ -1178,8 +1440,7 @@ function editorLoadPreconfig(suffix, cb) {
             var arr = JSON.parse(script);
             if (Array.isArray(arr)) {
                 window.editor.strategy.instructions = arr;
-                window.editor.strategy.name = suffix;   // nom court (p.ex. "PMX0")
-                window.editor.currentInstructionIdx = Math.max(0, arr.length - 1);
+                window.editor.strategy.name = suffix;
                 window.editor.selectedTaskRef = null;
                 var nameInput = document.getElementById('editorStratName');
                 if (nameInput) nameInput.value = suffix;
@@ -1194,6 +1455,12 @@ function editorLoadPreconfig(suffix, cb) {
                     editorUpdateRobotFromInitialPose();
                 }
             } catch (e) { console.error('Parse ' + initFile + ':', e); }
+            // Prepare playback en bleu (Suivant/Auto se debloquent)
+            if (Array.isArray(window.editor.strategy.instructions)
+                    && window.editor.strategy.instructions.length > 0
+                    && typeof loadSimulatorStrat === 'function') {
+                loadSimulatorStrat(JSON.parse(JSON.stringify(window.editor.strategy.instructions)));
+            }
             editorRenderInstructionsList();
             editorUpdateLoadedSlotUi();
             if (cb) cb();
@@ -1214,7 +1481,6 @@ function editorCreateNewStrategy() {
     window.editor.strategy.instructions = [];
     window.editor.strategy.name = 'NEW';
     window.editor.loadedStratFileName = null;
-    window.editor.currentInstructionIdx = 0;
     window.editor.selectedTaskRef = null;
     window.editor.dirty = false;
     var nameInput = document.getElementById('editorStratName');

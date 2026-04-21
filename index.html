@@ -109,6 +109,7 @@
                 </div>
 
                 <button type="button" id="drawStratBtn" onclick="editorToggleDrawStrat();" title="Dessine toute la strat d'un coup (live update si edition)" disabled>🖌 Dessiner strat</button>
+                <button type="button" id="btnInstrBounds" onclick="editorToggleInstrBounds();" title="Afficher/masquer les encadres par groupe d'instruction (dans l'apercu)">📦 Groupe</button>
                 <span class="stratSep">|</span>
                 <button id="pmxNext" onclick="stepNext();" disabled>⏭ Suivant</button>
                 <button id="pmxAuto" onclick="autoPlay();" disabled>▶ Auto</button>
@@ -120,6 +121,28 @@
                 <button type="button" onclick="editorLoadPreconfig('PMX1');" title="Charger strategyPMX1.json + initPMX1.json">📦 LOAD PMX1 / INIT1</button>
                 <button type="button" onclick="editorLoadPreconfig('EXEMPLE0');" title="Demo : toutes les commandes + retour zone depart">📦 LOAD EXEMPLE0</button>
             </div>
+
+            <!-- Legende couleurs traces (repliable) -->
+            <details style="margin-top:4px; font-size:13px;">
+                <summary style="cursor:pointer; color:#555;">Légende couleurs traces</summary>
+                <div class="legendColors">
+                    <span class="legendItem"><span class="legendSwatch" style="background:rgba(0,200,180,1)"></span>GO_TO / GO_BACK_TO</span>
+                    <span class="legendItem"><span class="legendSwatch" style="background:rgba(255,20,147,1)"></span>PATH_TO / PATH_BACK / MANUAL_PATH</span>
+                    <span class="legendItem"><span class="legendSwatch" style="background:rgba(100,180,255,1)"></span>MOVE_FORWARD_TO</span>
+                    <span class="legendItem"><span class="legendSwatch" style="background:rgba(255,180,80,1)"></span>MOVE_BACKWARD_TO</span>
+                    <span class="legendItem"><span class="legendSwatch" style="background:rgba(30,144,255,1)"></span>LINE ≥ 0</span>
+                    <span class="legendItem"><span class="legendSwatch" style="background:rgba(255,140,0,1)"></span>LINE &lt; 0</span>
+                </div>
+                <div class="legendColors">
+                    <span class="legendItem"><span class="legendSwatch" style="background:rgba(180,0,255,1)"></span>ORBITAL_TURN_DEG</span>
+                    <span class="legendItem"><span class="legendSwatch" style="background:rgba(140,0,200,0.8)"></span>FACE_* / ROTATE_* (arc)</span>
+                    <span class="legendItem"><span class="legendSwatch" style="width:12px; height:12px; border-radius:50%; background:rgba(255,220,80,0.9); border:1px solid #888;"></span>M/W/S/E : MANIPULATION / WAIT / SPEED / ELEMENT</span>
+                </div>
+                <div class="legendColors">
+                    <span class="legendItem"><span class="legendSwatch" style="background:#444;"></span>trait plein = avant</span>
+                    <span class="legendItem"><span class="legendSwatch" style="background-image:linear-gradient(to right, #444 50%, transparent 50%); background-size:10px 3px;"></span>trait pointillé = arrière (BACK / MOVE_BACKWARD / LINE&lt;0 / ORBITAL forward:false / FACE_BACK)</span>
+                </div>
+            </details>
         </details>
     </div>
 </div>
