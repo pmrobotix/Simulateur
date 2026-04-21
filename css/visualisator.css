@@ -1,7 +1,99 @@
+body {
+    display: flex;
+    align-items: flex-start;     /* canvasColumn / configBlock / logColumn cote a cote */
+    margin: 0;
+    gap: 0;
+}
+/* Colonne gauche : [terrain + toggle log + logColumn] au-dessus,
+   [Config visuelle + Deplacement manuel] en dessous */
+.canvasColumn {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+}
+.belowCanvasRow {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 2px 0;
+}
+.collapsibleBlock {
+    border: 1px solid #888;
+    padding: 2px 4px;
+    font-size: 14px;
+    background: #fafafa;
+}
+.collapsibleBlock summary {
+    cursor: pointer;
+    font-weight: bold;
+    padding: 2px 4px;
+    list-style: revert;                /* garde la fleche native */
+    user-select: none;
+}
+.collapsibleBlock[open] {
+    background: #eef4ff;
+}
+.stratRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    align-items: flex-start;      /* evite l'interligne supplementaire quand un item est plus haut */
+}
+.stratPlayCol {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    align-items: stretch;
+}
+.loadedName {
+    color: #555;
+    font-size: 11px;
+    text-align: center;
+    line-height: 1;
+}
+.stratSep {
+    color: #aaa;
+    margin: 0 4px;
+}
+.playBtnsStack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.collapsibleBlock[open] > div:not(:first-child),
+.collapsibleBlock[open] > button,
+.collapsibleBlock[open] > .configVisuelleRow,
+.collapsibleBlock[open] > .manualMoveGrid {
+    margin-top: 3px;
+}
+.sideToggleBtn {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);          /* libelle lisible du bas vers le haut */
+    font-size: 14px;
+    padding: 10px 4px;
+    margin: 0 2px;
+    cursor: pointer;
+    align-self: flex-start;             /* ne suit pas la taille des siblings */
+    flex: 0 0 auto;
+    height: 100vh;                      /* pleine hauteur fenetre, independant */
+    box-sizing: border-box;
+}
+#fitBtn {
+    font-size: 16px;
+    padding: 4px 30px;
+    font-weight: bold;
+}
 .outsideWrapper{
-    width:3000px; height:2000px;
+    width:1500px;                    /* defaut zoom 50% (slider / resize / Fit en JS) */
+    aspect-ratio: 3 / 2;             /* hauteur auto proportionnelle */
     margin:0px 0px;
-    display: inline-block;
+    flex: 0 0 auto;
+    resize: horizontal;              /* poignee a droite pour etirer */
+    overflow: hidden;
+    min-width: 300px;
+    max-width: 95vw;
 }
 .insideWrapper{
     width:100%; height:100%;
@@ -20,34 +112,287 @@
     position:absolute; top:50px; left:50px;
 }
 .configBlock {
-    display: inline-block;
-    width: 750px;
-    vertical-align: top;
-    font-size: 35px;
+    width: fit-content;
+    max-width: 750px;
+    font-size: 18px;
+    flex: 0 0 auto;
+    padding: 0 2px;
 }
 .formBlock {
-    width: 750px;
-    margin: 10px;
+    margin: 2px 0;
 }
-.instructionsBlock {
-    width: 750px;
-    margin: 10px;
+
+/* Boutons de lancement par couleur (strats) */
+.btnStratBleu {
+    background-color: #1976d2;
+    color: white;
+    border: 2px solid #1976d2;
 }
-.dataBlock {
-    width: 750px;
-    margin: 10px;
+.btnStratJaune {
+    background-color: #fbc02d;
+    color: black;
+    border: 2px solid #fbc02d;
+}
+.btnStratBleu.inverted {
+    background-color: transparent;
+    color: #1976d2;
+}
+.btnStratJaune.inverted {
+    background-color: transparent;
+    color: #b38600;
+}
+.btnStratBleu:disabled,
+.btnStratJaune:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* Panneau lateral editeur de strategie (droite du terrain, symetrique du log) */
+#editorSidePanel {
+    display: none;               /* cache par defaut ; JS met 'flex' */
+    flex-direction: column;
+    width: 500px;
+    height: 100vh;                /* pleine hauteur fenetre par defaut */
+    margin: 0;
+    padding: 0;
+    border: 1px solid #888;
+    resize: both;
+    overflow: hidden;             /* body interne gere le scroll */
+    min-width: 300px;
+    min-height: 300px;
+    flex: 0 0 auto;
+    align-self: flex-start;       /* independant de la taille des siblings */
+    background: #fafafa;
+}
+#editorSidePanel .logHeader {
+    flex: 0 0 auto;
+    font-weight: bold;
+    padding: 6px 8px;
+    background: #d0e0ff;
+    border-bottom: 1px solid #888;
+}
+#editorSidePanel #editorPanelBody {
+    flex: 1 1 0;
+    min-height: 0;            /* critique en flex : sans ca, l'enfant ne shrink pas */
+    overflow: hidden;         /* le scroll interne se fait sur la liste d'instructions */
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+}
+/* Solution C : la liste d'instructions prend tout l'espace restant et scrolle
+   seule. L'edition de task reste fixe en bas, la top toolbar fixe en haut. */
+#editorInstructionsFieldset {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+#editorInstructionsFieldset #editorInstructionsList {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+}
+#editorTaskEditFieldset {
+    flex: 0 0 auto;
+}
+/* Force les DESCENDANTS (pas editorPanelBody lui-meme) a heriter du font-size,
+   pour que A+/A- applique a editorPanelBody se propage uniformement. */
+#editorPanelBody input,
+#editorPanelBody button,
+#editorPanelBody select,
+#editorPanelBody textarea,
+#editorPanelBody label,
+#editorPanelBody span,
+#editorPanelBody strong,
+#editorPanelBody em,
+#editorPanelBody legend,
+#editorPanelBody fieldset,
+#editorPanelBody div,
+#editorPanelBody li,
+#editorPanelBody ul {
+    font-size: inherit !important;
+}
+#editorSidePanel {
+    position: relative;       /* contexte pour la poignee sideResizer absolue */
+}
+
+/* Colonne log (3e colonne) - toggleable via bouton Afficher/Masquer log */
+#logColumn {
+    display: none;               /* cache par defaut ; JS met 'flex' */
+    flex-direction: column;
+    width: 600px;
+    height: 100vh;               /* pleine hauteur fenetre par defaut */
+    margin: 0;
+    padding: 0;
+    border: 1px solid #888;
+    overflow: hidden;
+    min-width: 250px;
+    min-height: 200px;
+    flex: 0 0 auto;
+    align-self: flex-start;
+    position: relative;          /* contexte pour la poignee de redim */
+}
+/* Poignee de redimensionnement sur toute la hauteur du bord droit */
+.sideResizer {
+    position: absolute;
+    top: 0;
+    width: 8px;
+    height: 100%;
+    cursor: ew-resize;
+    z-index: 10;
+    background: transparent;
+}
+.sideResizer.edge-right { right: 0; }
+.sideResizer.edge-left { left: 0; }
+.sideResizer:hover {
+    background: rgba(0, 100, 255, 0.25);
+}
+#logColumn .logHeader,
+#editorSidePanel .logHeader {
+    flex: 0 0 auto;
+    font-weight: bold;
+    padding: 4px 8px;
+    background: #eee;
+    border-bottom: 1px solid #888;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+.fontSizeBtns button {
+    font-size: 12px;
+    padding: 2px 6px;
+    margin-left: 2px;
+}
+#logColumn .dataFieldset {
+    flex: 1;
+    margin: 0;
+    padding: 4px 8px;
+    height: auto;
+    resize: none;                /* redim gere par la colonne */
+    min-width: auto;
+    min-height: auto;
+    border: none;
+}
+
+#editorInstructionsList ul {
+    list-style: none;
+    padding-left: 0;
+}
+.editorTaskItem {
+    padding: 4px 6px;
+    border: 1px solid #ccc;
+    margin: 2px 0;
+    cursor: pointer;
+}
+.editorTaskItem.selected {
+    background-color: #fff6a8;
+    border-color: #e0a800;
+}
+.editorContextMenu {
+    position: absolute;
+    background: white;
+    border: 2px solid #444;
+    padding: 4px;
+    z-index: 1000;
+    font-size: 22px;
+}
+.editorContextMenu button {
+    display: block;
+    width: 100%;
+    margin: 2px 0;
+    font-size: 22px;
+    padding: 6px;
 }
 .dataFieldset {
     overflow: auto;
     height: 598px;
     display: block;
     text-align: left;
-    font-size: 25px;
+    font-size: 18px;
+    resize: both;          /* poignee de redim en bas-droite */
+    min-width: 300px;
+    min-height: 150px;
 }
 
-button,input {
-    font-size: 25px;
-    padding: 10px;
+button, input, select {
+    font-size: 14px;
+    padding: 2px 6px;
+}
+.configBlock fieldset {
+    width: fit-content;
+    max-width: 730px;
+}
+.configBlock fieldset legend {
+    font-size: 19px;
+    font-weight: bold;
+}
+/* Boutons de lecture par couleur : meme taille que les autres, juste colores */
+.btnStratBleu, .btnStratJaune {
+    font-size: 14px;
+    padding: 2px 6px;
+}
+/* Etat actif : couleur courante selectionnee (matchColor) */
+.btnStratBleu.active {
+    outline: 3px solid #0d47a1;
+    outline-offset: 1px;
+    box-shadow: 0 0 8px rgba(13,71,161,0.6);
+}
+.btnStratJaune.active {
+    outline: 3px solid #f57f17;
+    outline-offset: 1px;
+    box-shadow: 0 0 8px rgba(245,127,23,0.6);
+}
+/* Configuration visuelle : tout sur UNE ligne (nowrap) */
+.configVisuelleRow {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 3px 8px;
+    align-items: center;
+    font-size: 14px;
+}
+.configVisuelleRow input[type="range"] {
+    width: 70px;
+    flex: 0 0 auto;
+}
+.configVisuelleRow button {
+    font-size: 14px;
+    padding: 2px 6px;
+    flex: 0 0 auto;
+}
+.configVisuelleRow span {
+    min-width: 30px;
+    text-align: right;
+    flex: 0 0 auto;
+}
+.configVisuelleRow .cfgLabel {
+    min-width: auto;
+    font-weight: bold;
+}
+
+/* Deplacement manuel : tout sur une ligne, Go a droite */
+.manualMoveGrid {
+    display: flex;
+    flex-direction: row;
+    gap: 2px 8px;
+    align-items: center;
+    font-size: 14px;
+}
+.manualMoveGrid label {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+.manualMoveGrid input[type="number"] {
+    width: 60px;
+    font-size: 14px;
+    padding: 2px 4px;
+}
+.manualMoveGrid button {
+    margin-left: auto;      /* Go colle a droite */
+    font-size: 14px;
+    padding: 2px 10px;
 }
 .inputfile {
     width: 0.1px;
@@ -58,14 +403,14 @@ button,input {
     z-index: -1;
 }
 .inputfile + label {
-    font-size: 25px;
+    font-size: 18px;
     font-weight: 500;
     color: white;
     background-color: hotpink;
     display: inline-block;
     cursor: pointer;
-    padding: 10px;
-    margin: 5px;
+    padding: 6px 8px;
+    margin: 2px;
 }
 
 .inputfile:focus + label,
@@ -73,12 +418,3 @@ button,input {
     background-color: deeppink;
 }
 
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-td, th {
-    padding: 10px;
-    border: 1px solid black;
-    text-align: center;
-}

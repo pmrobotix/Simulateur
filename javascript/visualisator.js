@@ -133,6 +133,75 @@ function setGridOpacity(value) {
     if (stage) stage.update();
 }
 
+/**
+ * Affiche / masque l'image de la table (png de fond).
+ */
+function toggleTableImage() {
+    var img = document.getElementById('table');
+    if (!img) return;
+    img.style.visibility = (img.style.visibility === 'hidden') ? 'visible' : 'hidden';
+}
+
+/**
+ * Ajuste la taille de police d'un element (par pas de 1px). Utilise pour les
+ * boutons A- / A+ des panneaux log et editeur.
+ */
+function adjustFontSize(elementId, delta) {
+    var el = document.getElementById(elementId);
+    if (!el) return;
+    var cur = parseFloat(window.getComputedStyle(el).fontSize) || 14;
+    var next = Math.max(8, Math.min(40, cur + delta));
+    el.style.fontSize = next + 'px';
+}
+
+/**
+ * Zoom CSS du terrain (resolution interne canvas inchangee : 3000x2000).
+ * La hauteur suit automatiquement via aspect-ratio CSS.
+ * @param percent 20..100 (%)
+ */
+function setCanvasZoom(percent) {
+    var wrapper = document.querySelector('.outsideWrapper');
+    if (wrapper) {
+        wrapper.style.width = (3000 * percent / 100) + 'px';
+        wrapper.style.height = '';    /* aspect-ratio gere */
+    }
+    var valSpan = document.getElementById('zoomVal');
+    if (valSpan) valSpan.textContent = percent + '%';
+}
+
+/**
+ * Bouton "Fit" : calcule l'espace dispo horizontal ET vertical (soustrait tous
+ * les elements visibles autour du canvas), prend le plus contraignant
+ * (aspect 3:2 du terrain), applique au wrapper.
+ */
+function fitCanvasToBrowser() {
+    var wrapper = document.querySelector('.outsideWrapper');
+    if (!wrapper) return;
+    // Largeur : soustrait tous les enfants visibles de body sauf canvasColumn
+    var availW = window.innerWidth - 8;
+    Array.from(document.body.children).forEach(function (el) {
+        if (el.classList.contains('canvasColumn')) return;
+        var style = window.getComputedStyle(el);
+        if (style.display === 'none') return;
+        availW -= el.offsetWidth;
+    });
+    // Hauteur : soustrait la hauteur de belowCanvasRow (controles sous terrain)
+    var availH = window.innerHeight - 8;
+    var belowRow = document.querySelector('.belowCanvasRow');
+    if (belowRow) availH -= belowRow.offsetHeight;
+    // Aspect ratio terrain = 3:2
+    var targetW = Math.min(availW, availH * 3 / 2);
+    targetW = Math.max(300, targetW);
+    wrapper.style.width = targetW + 'px';
+    wrapper.style.height = '';
+    // Sync slider + label
+    var percent = Math.round((targetW / 3000) * 100);
+    var slider = document.getElementById('canvasZoom');
+    if (slider) slider.value = Math.max(20, Math.min(100, percent));
+    var valSpan = document.getElementById('zoomVal');
+    if (valSpan) valSpan.textContent = percent + '%';
+}
+
 // Convention PMX-CORTEX
 //   X horizontal: 0..3000 (mm)
 //   Y vertical:   0..2000 (mm), 0 en bas
@@ -181,13 +250,18 @@ function drawPmxRobot(shape, fill, stroke) {
 }
 
 var stratSimulator;
-var stratLog;
 var stratIndex = 0;
 var timestampLog;
 
 var rotationTime = 100;
 var moveTime = 600;
 var detected = [];
+// Shapes tracant les deplacements du robot (ligne colorees) ; nettoyees au reset.
+var pathShapes = [];
+// Flag : auto en cours (enchaine les tasks). Source de verite unique.
+var autoPlaying = false;
+// Pose logique de playback (PMX mm), independante du tween createjs.
+var playbackPose = null;
 
 function init(currentYear, rotateTable) {
     var head  = document.getElementsByTagName('head')[0];
@@ -201,7 +275,7 @@ function init(currentYear, rotateTable) {
     canvas.width = rotateTable ? 2000 : 3000;
     canvas.height = rotateTable ? 3000 : 2000;
 
-    $.getScript(`resources/${currentYear}/initBig.json`, function (script) {
+    $.getScript(`resources/${currentYear}/initPMX0.json`, function (script) {
         var init = JSON.parse(script);
         // Conversion PMX -> canvas pour init (x,y en coord PMX dans le JSON)
         init._cx = toCanvasX(init.x);
@@ -232,6 +306,9 @@ function initComplete(currentYear, start) {
     createjs.Ticker.setFPS(60);
     createjs.Ticker.addEventListener("tick", stage);
     initRobot(start);
+
+    // Editeur de strategie (optionnel: editor.js peut ne pas etre charge)
+    if (typeof editorInit === 'function') editorInit(start);
 
     var inputs = document.querySelectorAll('.inputfile');
     Array.prototype.forEach.call(inputs, function (input) {
@@ -271,16 +348,36 @@ function initRobot(start) {
  * @param speed Temps d'exécution
  * @param strokeColor Couleur du tracé (défaut: rose)
  */
-function moveRobot(x, y, rotation, speed, auto = false, strokeColor = 'rgba(255,20,147,1)') {
+/**
+ * Deplace le robot avec animation + trace de la ligne.
+ * @param fromX/fromY optionnels : coord PMX de depart (pour la ligne + point
+ *     de depart du tween). Si absents, utilise pmx.x/y actuel.
+ * L'utilisation des fromX/fromY permet d'enchainer correctement les taches
+ * meme si un tween precedent est encore en cours (kill + resume from that pose).
+ */
+function moveRobot(x, y, rotation, speed, auto = false, strokeColor = 'rgba(255,20,147,1)', fromX, fromY) {
     var cx = toCanvasX(x);
     var cy = toCanvasY(y);
+    var startX = (fromX !== undefined) ? toCanvasX(fromX) : pmx.x;
+    var startY = (fromY !== undefined) ? toCanvasY(fromY) : pmx.y;
+
+    // Trace la ligne du point de depart logique au point d'arrivee.
     var shape = new createjs.Shape();
     shape.graphics
         .setStrokeStyle(3)
         .beginStroke(strokeColor)
-        .moveTo(pmx.x, pmx.y)
+        .moveTo(startX, startY)
         .lineTo(cx, cy);
     stage.addChild(shape);
+    pathShapes.push(shape);
+
+    // Kill eventuel tween en cours + snap pmx au point de depart logique,
+    // pour que l'animation parte toujours de la pose "fin de task precedente".
+    if (fromX !== undefined && fromY !== undefined) {
+        createjs.Tween.removeTweens(pmx);
+        pmx.x = startX;
+        pmx.y = startY;
+    }
     stage.update();
 
     var tRotation = rotationTime;
@@ -552,7 +649,7 @@ function applyColorFilter(color) {
  * Téléporte (sans tween) le robot à la pose initiale (éventuellement miroir).
  */
 function teleportToInit(mirror) {
-    $.getScript(`resources/${currentYear}/initBig.json`, function (script) {
+    $.getScript(`resources/${currentYear}/initPMX0.json`, function (script) {
         var init = JSON.parse(script);
         var x = mirror ? mirrorX(init.x) : init.x;
         var y = init.y;
@@ -567,92 +664,159 @@ function teleportToInit(mirror) {
 }
 
 /**
- * Charge la stratégie depuis strategyPMX0.json et applique le miroir si besoin.
+ * Pause : arrete juste l'enchainement (la task courante termine normalement).
+ */
+function pauseAuto() {
+    autoPlaying = false;
+    updatePlayPauseBtn();
+}
+
+/**
+ * Reset complet : arrete l'enchainement + kill le tween en cours (pour BLEU/
+ * JAUNE ou re-load PMX0).
+ */
+function stopAuto() {
+    autoPlaying = false;
+    if (typeof createjs !== 'undefined' && pmx) {
+        createjs.Tween.removeTweens(pmx);
+    }
+    updatePlayPauseBtn();
+}
+
+/**
+ * Synchronise le libelle du bouton Play/Pause avec l'etat autoPlaying.
+ */
+function updatePlayPauseBtn() {
+    var btn = document.getElementById('pmxAuto');
+    if (!btn) return;
+    btn.textContent = autoPlaying ? '⏸ Pause' : '▶ Auto';
+}
+
+/**
+ * Nettoie les traces, le log, le playback state, les tweens.
+ * Appele avant de relancer une strategie (BLEU/JAUNE) ou au re-chargement PMX0.
+ */
+function resetTerrainAndPaths() {
+    stopAuto();
+    // Clear les traces de deplacement (moveRobot)
+    pathShapes.forEach(function (s) {
+        if (s.parent) s.parent.removeChild(s);
+    });
+    pathShapes = [];
+    // Clear les cercles de detection (Live/log)
+    detected.forEach(function (name) {
+        var s = stage.getChildByName(name);
+        if (s) stage.removeChild(s);
+        var m = stage.getChildByName(name + '_margin');
+        if (m) stage.removeChild(m);
+    });
+    detected = [];
+    // Reactive toutes les zones (supprime l'effet des DELETE_ZONE precedents)
+    zoneShapeList.forEach(function (s) {
+        s.visible = true;
+        zoneVisibilityCache.set(s, true);
+    });
+    // Clear panneau log execution
+    var dataDiv = document.getElementById('data');
+    if (dataDiv) dataDiv.innerHTML = '';
+    // Reset index strat + pose logique de playback
+    stratIndex = 0;
+    playbackPose = null;
+    if (stage) stage.update();
+    // Re-render editor layer (efface eventuels vestiges + redessine proprement)
+    if (typeof editorRenderLayer === 'function') editorRenderLayer();
+}
+
+/**
+ * Charge strategyPMX0.json + initPMX0.json depuis le disque dans le state
+ * partage (editor.strategy / editor.initialPose), puis lance la lecture avec
+ * la couleur demandee (miroir applique si jaune).
  * @param color 'bleu' ou 'jaune'
  */
-function loadStratColor(color) {
-    matchColor = color;
+function loadDefaultStrat(color) {
+    matchColor = color;           // defini AVANT reset
+    if (typeof editorUpdateLoadedSlotUi === 'function') editorUpdateLoadedSlotUi();
+    resetTerrainAndPaths();
     var mirror = (color === 'jaune');
-
-    teleportToInit(mirror);
-
     if (zonesLoaded) applyColorFilter(color);
 
     $.getScript(`resources/${currentYear}/strategyPMX0.json`, function (script) {
-        var strategy = JSON.parse(script);
-        if (mirror) strategy = mirrorStrategy(strategy);
-        loadSimulatorStrat(strategy);
+        var raw = JSON.parse(script);
+        if (window.editor) {
+            window.editor.strategy.instructions = raw;
+            window.editor.strategy.name = 'strategyPMX0';
+            window.editor.currentInstructionIdx = Math.max(0, raw.length - 1);
+            window.editor.selectedTaskRef = null;
+            var nameInput = document.getElementById('editorStratName');
+            if (nameInput) nameInput.value = 'strategyPMX0';
+        }
+        $.getScript(`resources/${currentYear}/initPMX0.json`, function (script2) {
+            var init = JSON.parse(script2);
+            if (window.editor) {
+                window.editor.initialPose = { x: init.x, y: init.y, theta: init.theta };
+                if (typeof editorRefreshInitialPoseInputs === 'function') editorRefreshInitialPoseInputs();
+            }
+            var x = mirror ? mirrorX(init.x) : init.x;
+            var y = init.y;
+            var theta = mirror ? (Math.PI - init.theta) : init.theta;
+            if (pmx) {
+                pmx.x = toCanvasX(x);
+                pmx.y = toCanvasY(y);
+                pmx.rotation = toCanvasRotationDeg(theta);
+                if (stage) stage.update();
+            }
+            if (typeof editorRenderInstructionsList === 'function') editorRenderInstructionsList();
+
+            var strategy = JSON.parse(JSON.stringify(raw));
+            if (mirror) strategy = mirrorStrategy(strategy);
+            loadSimulatorStrat(strategy);
+        });
     });
 }
 
 /**
- * Chargement des logs d'un match du robot principal
- * @returns {boolean}
+ * Lit la strategie courante (editor.strategy) et la joue avec la couleur
+ * demandee. editor.strategy.instructions peut etre issu du fichier charge
+ * via le picker, ou des modifications de l'editeur.
+ * @param color 'bleu' ou 'jaune'
  */
-function loadStratLog() {
-    var file = document.getElementById('stratLog');
-    if (file && file.files && file.files.length) {
-        var reader = new FileReader();
-        reader.onload = function (e) {
-            stratLog = cleanLogFile(e.target.result);
-            rotationTime = 50;
-            moveTime = 50;
-            stratIndex = 0;
+function loadLoadedStrat(color) {
+    if (!window.editor || !Array.isArray(window.editor.strategy.instructions)
+            || window.editor.strategy.instructions.length === 0) return;
+    matchColor = color;           // defini AVANT reset pour que editorRenderLayer utilise la bonne couleur
+    if (typeof editorUpdateLoadedSlotUi === 'function') editorUpdateLoadedSlotUi();
+    resetTerrainAndPaths();
+    var mirror = (color === 'jaune');
+    if (zonesLoaded) applyColorFilter(color);
 
-            for (var key in stratLog) {
-                if (stratLog[key].includes('TRACE: Position :')) {
-                    var regexpAsserv = /.+\[Asserv\].+#([-0-9]+);([-0-9]+);([-0-9\.]+).+/;
-                    var parseAsserv = regexpAsserv.exec(stratLog[key]);
-                    if (parseAsserv != null) {
-                        createjs.Tween.get(pmx)
-                            .to({rotation: radiansToDegrees(parseAsserv[3])}, rotationTime, createjs.Ease.getPowInOut(4))
-                            .to({x: parseAsserv[2], y: parseAsserv[1]}, moveTime, createjs.Ease.getPowInOut(4));
-                        console.log('PMX init : ' + parseAsserv[1] + ' - ' + parseAsserv[2] + ' - ' + radiansToDegrees(parseAsserv[3]));
-                        break;
-                    }
-                }
-            }
-        };
-        reader.readAsBinaryString(file.files[0]);
-        document.getElementById('pmxNext').disabled = false;
-        document.getElementById('pmxAuto').disabled = false;
-        return true;
+    var p = window.editor.initialPose;
+    var x = mirror ? mirrorX(p.x) : p.x;
+    var y = p.y;
+    var theta = mirror ? (Math.PI - p.theta) : p.theta;
+    if (pmx) {
+        pmx.x = toCanvasX(x);
+        pmx.y = toCanvasY(y);
+        pmx.rotation = toCanvasRotationDeg(theta);
+        if (stage) stage.update();
     }
-}
+    // Initialise la pose de playback pour que "Suivant" / auto enchainent
+    // correctement depuis cette pose.
+    playbackPose = { x: x, y: y, theta: theta };
 
-function cleanLogFile(file) {
-    var res = [];
-    var drop = true;
-    var split = file.split('\n');
-    for (var key in split) {
-
-        if (drop && split[key].includes('Tirette pull, begin of the match')) {
-            drop = false;
-        }
-        if (!drop && split[key] !== '' && !split[key].includes('DEBUG: Detection NOK')) {
-            res.push(split[key]);
-        }
-    }
-    return res;
+    var strategy = JSON.parse(JSON.stringify(window.editor.strategy.instructions));
+    if (mirror) strategy = mirrorStrategy(strategy);
+    loadSimulatorStrat(strategy);
 }
 
 /**
- * Récupération et application de l'instruction suivante du PMX
- * @returns {boolean}
+ * Joue la prochaine task du simulateur.
+ * @returns {boolean} true quand la fin est atteinte
  */
 function nextInstruction(auto = false) {
-    var startFile = stratSimulator ? stratSimulator : stratLog;
-    if (stratIndex >= startFile.length) {
-        return true;
-    }
-    var instruction = startFile[stratIndex];
+    if (!stratSimulator || stratIndex >= stratSimulator.length) return true;
+    var instruction = stratSimulator[stratIndex];
     stratIndex++;
-
-    if (stratSimulator) {
-        playSimulatorInstruction(instruction, 'data', auto);
-    } else {
-        playLogInstruction(instruction, auto);
-    }
+    playSimulatorInstruction(instruction, 'data', auto);
     return false;
 }
 
@@ -833,14 +997,19 @@ async function playSimulatorInstruction(task, divId, auto = false) {
         else if (task.subtype === 'ADD_ZONE' && task.item_id) addZone(task.item_id);
     }
 
-    // Gestion du déplacement (MOVEMENT)
+    // Gestion du déplacement (MOVEMENT) : on utilise playbackPose (pose logique,
+    // independante du tween) pour que "Suivant" fonctionne en sequence meme
+    // lorsque le tween n'est pas termine. On passe aussi fromX/fromY a moveRobot
+    // pour que la ligne de trace + le tween partent de la pose logique.
     if (task.type === 'MOVEMENT') {
-        var pose = currentPmxPose();
-        var target = computeTaskTarget(task, pose.x, pose.y, pose.theta);
+        if (!playbackPose) playbackPose = currentPmxPose();
+        var fromX = playbackPose.x, fromY = playbackPose.y;
+        var target = computeTaskTarget(task, playbackPose.x, playbackPose.y, playbackPose.theta);
         if (target !== null) {
             var strokeColor = strokeColorForTask(task);
             moveRobot(target.x, target.y, target.theta, undefined, false,
-                strokeColor || 'rgba(255,20,147,1)');
+                strokeColor || 'rgba(255,20,147,1)', fromX, fromY);
+            playbackPose = { x: target.x, y: target.y, theta: target.theta };
         }
     }
 
@@ -850,9 +1019,11 @@ async function playSimulatorInstruction(task, divId, auto = false) {
         : (moveTime + rotationTime);
     await sleep(delay);
 
-    if (auto) {
+    // Enchaine uniquement si auto est encore actif (autoPlaying = source verite)
+    if (autoPlaying) {
         nextInstruction(true);
     }
+    void auto;  // parametre conserve pour compat, non utilise
 }
 
 async function playLogInstruction(instruction, auto = false) {
@@ -939,16 +1110,36 @@ async function playLogInstruction(instruction, auto = false) {
     }
 }
 
+/**
+ * Toggle Auto/Pause. Si running : pause (task courante finit normalement).
+ * Si pas running : demarre/reprend l'enchainement depuis stratIndex.
+ */
 async function autoPlay() {
+    if (autoPlaying) {
+        pauseAuto();
+        return;
+    }
+    if (!stratSimulator) return;
+    if (stratIndex >= stratSimulator.length) stratIndex = 0;
+    autoPlaying = true;
+    updatePlayPauseBtn();
     nextInstruction(true);
+}
+
+/**
+ * Bouton "Suivant" : stoppe l'auto (s'il tourne) et joue UNE task a partir de
+ * stratIndex. La task courante qui serait en cours reste interrompue par le
+ * fromX/fromY passe a moveRobot (snap + nouveau tween). Auto peut reprendre
+ * plus tard avec le bouton Auto.
+ */
+function stepNext() {
+    autoPlaying = false;
+    updatePlayPauseBtn();
+    nextInstruction(false);
 }
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function loadFiles() {
-    loadStratLog();
 }
 
 function connectSocket() {

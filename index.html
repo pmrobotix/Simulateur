@@ -12,132 +12,192 @@
     <script src="libs/geometric.js"></script>
     <script src="javascript/currentYear.js"></script>
     <script src="javascript/visualisator.js"></script>
+    <script src="javascript/editor.js"></script>
 </head>
 
 <body onload="init(currentYear, rotateTable);">
 
-<div class="outsideWrapper">
-    <div class="insideWrapper">
-        <img id="table" alt="table" class="coveredImage" style="cursor: pointer; opacity: 0.7;" onclick="toggleZones();" title="Clic pour afficher/masquer les zones">
-        <canvas id="canvas" class="coveringCanvas" width="3000" height="2000"></canvas>
+<!-- GAUCHE : colonne log (affichage execution PMX) -->
+<div id="logColumn" style="display:none;">
+    <div class="logHeader">
+        <span>Exécution PMX</span>
+        <span class="fontSizeBtns">
+            <button type="button" onclick="adjustFontSize('data', -1)" title="Texte plus petit">A-</button>
+            <button type="button" onclick="adjustFontSize('data', +1)" title="Texte plus grand">A+</button>
+        </span>
+    </div>
+    <div id="data" class="dataFieldset"></div>
+</div>
+<button type="button" id="toggleLogColumn" class="sideToggleBtn" title="Afficher/masquer le log d'execution">◂ log</button>
+
+<!-- CENTRE : terrain + controles en dessous -->
+<div class="canvasColumn">
+    <div class="outsideWrapper">
+        <div class="insideWrapper">
+            <img id="table" alt="table" class="coveredImage" style="cursor: pointer; opacity: 0.7;" onclick="toggleZones();" title="Clic pour afficher/masquer les zones">
+            <canvas id="canvas" class="coveringCanvas" width="3000" height="2000"></canvas>
+        </div>
+    </div>
+
+    <div class="belowCanvasRow">
+        <button type="button" id="fitBtn" onclick="fitCanvasToBrowser();" title="Ajuster le terrain au max dans la fenetre">Fit</button>
+
+        <details class="collapsibleBlock" id="configVisuelleBlock">
+            <summary>Config visuelle</summary>
+            <div class="configVisuelleRow">
+                <button type="button" onclick="toggleTableImage();" title="Afficher/masquer l'image de la table">Table</button>
+                <input type="range" id="tableOpacity" min="0" max="100" value="70"
+                    oninput="document.getElementById('table').style.opacity = this.value / 100;
+                             document.getElementById('opacityVal').textContent = this.value + '%';">
+                <span id="opacityVal">70%</span>
+
+                <button onclick="showGrid();">Quadrillage</button>
+                <input type="range" id="gridOpacity" min="0" max="100" value="60"
+                    oninput="setGridOpacity(this.value / 100);
+                             document.getElementById('gridOpacityVal').textContent = this.value + '%';">
+                <span id="gridOpacityVal">60%</span>
+
+                <button onclick="showZones();">Zones</button>
+                <input type="range" id="zonesOpacity" min="0" max="100" value="60"
+                    oninput="setZonesOpacity(this.value / 100);
+                             document.getElementById('zonesOpacityVal').textContent = this.value + '%';">
+                <span id="zonesOpacityVal">60%</span>
+
+                <span class="cfgLabel">Zoom</span>
+                <input type="range" id="canvasZoom" min="20" max="100" value="50"
+                    oninput="setCanvasZoom(this.value);">
+                <span id="zoomVal">50%</span>
+            </div>
+        </details>
+
+        <details class="collapsibleBlock" id="liveBlock">
+            <summary>Live</summary>
+            <button type="button" onclick="connectSocket();">Connecter WebSocket</button>
+        </details>
+
+        <details class="collapsibleBlock" id="manualMoveBlock">
+            <summary>Déplacement</summary>
+            <div class="manualMoveGrid">
+                <label title="X en mm">X: <input name="pmx-x" id="pmx-x" type="number"/></label>
+                <label title="Y en mm">Y: <input name="pmx-y" id="pmx-y" type="number"/></label>
+                <label title="Theta en degres">θ: <input name="pmx-theta" id="pmx-theta" type="number"/></label>
+                <button onclick="moveRobot(
+                    document.getElementById('pmx-x').value,
+                    document.getElementById('pmx-y').value,
+                    document.getElementById('pmx-theta').value * Math.PI / 180
+                );">Go</button>
+            </div>
+        </details>
+
+        <details class="collapsibleBlock" id="stratBlock" open>
+            <summary>Stratégies</summary>
+
+            <!-- Ligne 1 : chargement fichier utilisateur + play + step -->
+            <div class="stratRow">
+                <button type="button" onclick="editorCreateNewStrategy();" title="Nouvelle stratégie vide (efface la strat courante)">✨ CREATE</button>
+                <button type="button" id="loadStratFileBtn" title="Charger un strategyXxx.json">📂 LOAD strat</button>
+                <button type="button" id="loadInitFileBtn" title="Charger un initXxx.json">📂 LOAD init</button>
+                <input type="file" id="loadStratFile" accept=".json" style="display:none;"/>
+                <input type="file" id="loadInitFile" accept=".json" style="display:none;"/>
+
+                <div class="stratPlayCol">
+                    <div style="display:flex; gap:2px;">
+                        <button class="btnStratBleu" id="playStratBleu" onclick="loadLoadedStrat('bleu');" disabled>BLEU</button>
+                        <button class="btnStratJaune" id="playStratJaune" onclick="loadLoadedStrat('jaune');" disabled>JAUNE</button>
+                    </div>
+                    <span id="loadedStratName" class="loadedName">(aucune)</span>
+                </div>
+
+                <button type="button" id="drawStratBtn" onclick="editorToggleDrawStrat();" title="Dessine toute la strat d'un coup (live update si edition)" disabled>🖌 Dessiner strat</button>
+                <span class="stratSep">|</span>
+                <button id="pmxNext" onclick="stepNext();" disabled>⏭ Suivant</button>
+                <button id="pmxAuto" onclick="autoPlay();" disabled>▶ Auto</button>
+            </div>
+
+            <!-- Ligne 2 : preconfig PMX0 -->
+            <div class="stratRow" style="margin-top:2px;">
+                <button type="button" onclick="editorLoadPreconfig('PMX0');" title="Charger strategyPMX0.json + initPMX0.json">📦 LOAD PMX0 / INIT0</button>
+                <button type="button" onclick="editorLoadPreconfig('PMX1');" title="Charger strategyPMX1.json + initPMX1.json">📦 LOAD PMX1 / INIT1</button>
+            </div>
+        </details>
     </div>
 </div>
 
-<div class="configBlock">
-    <div class="formBlock">
-        <fieldset>
-            <legend>Configuration</legend>
-            <div>
-                <button onclick="showZones();">Zones</button>
-                <button onclick="showGrid();">Quadrillage</button>
-            </div>
-            <div style="margin-top:10px;">
-                <label for="tableOpacity">Opacite table : <span id="opacityVal">70%</span></label>
-                <br>
-                <input type="range" id="tableOpacity" min="0" max="100" value="70" style="width:300px;"
-                    oninput="document.getElementById('table').style.opacity = this.value / 100;
-                             document.getElementById('opacityVal').textContent = this.value + '%';">
-            </div>
-            <div style="margin-top:10px;">
-                <label for="zonesOpacity">Opacite zones : <span id="zonesOpacityVal">60%</span></label>
-                <br>
-                <input type="range" id="zonesOpacity" min="0" max="100" value="60" style="width:300px;"
-                    oninput="setZonesOpacity(this.value / 100);
-                             document.getElementById('zonesOpacityVal').textContent = this.value + '%';">
-            </div>
-            <div style="margin-top:10px;">
-                <label for="gridOpacity">Opacite quadrillage : <span id="gridOpacityVal">60%</span></label>
-                <br>
-                <input type="range" id="gridOpacity" min="0" max="100" value="60" style="width:300px;"
-                    oninput="setGridOpacity(this.value / 100);
-                             document.getElementById('gridOpacityVal').textContent = this.value + '%';">
-            </div>
-            <div>
-                <button onclick="loadStratColor('bleu');">Strat Bleu</button>
-                <button onclick="loadStratColor('jaune');">Strat Jaune</button>
-            </div>
-        </fieldset>
+<!-- DROITE : panneau editeur de strategie (toggle) -->
+<button type="button" id="editorToggleMode" class="sideToggleBtn" title="Activer/desactiver le mode edition de strategie">✏ édition ▸</button>
+<div id="editorSidePanel" style="display:none;">
+    <div class="logHeader">
+        <span>Éditeur de stratégie</span>
+        <span class="fontSizeBtns">
+            <button type="button" onclick="adjustFontSize('editorPanelBody', -1)" title="Texte plus petit">A-</button>
+            <button type="button" onclick="adjustFontSize('editorPanelBody', +1)" title="Texte plus grand">A+</button>
+        </span>
     </div>
+    <div id="editorPanelBody" style="padding:4px; font-size:14px;">
+        <div>
+            <label for="editorStratName">Nom strat :</label>
+            <input type="text" id="editorStratName" value="PMX0" style="width:200px;" title="Nom court, p.ex. PMX0 → strategyPMX0.json + initPMX0.json"/>
+        </div>
+        <div style="margin-top:2px;">
+            <button type="button" id="editorExport">Exporter strat JSON</button>
+            <button type="button" id="editorExportInit">Exporter init</button>
+        </div>
 
-    <form id="formTable" name="formTable" class="formBlock" onsubmit="event.preventDefault(); loadFiles();">
-        <fieldset>
-            <legend>Configuration</legend>
-            <div>
-                <input type="file"
-                       id="stratLog" name="stratLog"
-                       class="inputfile"
-                       data-multiple-caption="{count} files selected"/>
-                <label for="stratLog"><span>Strat Log PMX</span></label>
-            </div>
+        <fieldset style="margin-top:2px;">
+            <legend>Pose initiale</legend>
+            <label>x: <input type="number" id="editorInitX" style="width:70px;"/></label>
+            <label>y: <input type="number" id="editorInitY" style="width:70px;"/></label>
+            <label>θ°: <input type="number" id="editorInitTheta" style="width:60px;"/></label>
+        </fieldset>
 
-            <div>
-                <button type="submit">Envoyer</button>
+        <fieldset style="margin-top:2px;">
+            <legend>Prochain clic</legend>
+            <select id="editorNextClick" style="min-width:250px;">
+                <option value="POSE_INIT">POSE_INIT (placer robot)</option>
+                <option value="GO_TO">GO_TO</option>
+                <option value="PATH_TO" selected>PATH_TO</option>
+                <option value="MOVE_FORWARD_TO">MOVE_FORWARD_TO</option>
+                <option value="MOVE_BACKWARD_TO">MOVE_BACKWARD_TO</option>
+                <option value="FACE_TO">FACE_TO</option>
+            </select>
+            <div style="margin-top:2px;">
+                Snap :
+                <label><input type="radio" name="editorSnap" value="0" checked/>0</label>
+                <label><input type="radio" name="editorSnap" value="10"/>10</label>
+                <label><input type="radio" name="editorSnap" value="50"/>50</label>
+                <label><input type="radio" name="editorSnap" value="100"/>100 mm</label>
             </div>
         </fieldset>
-    </form>
 
-    <div class="instructionsBlock">
-        <fieldset>
+        <fieldset style="margin-top:2px;">
+            <legend>Ajouter tâche</legend>
+            <button type="button" data-add-task="LINE">+ LINE</button>
+            <button type="button" data-add-task="ROTATE_DEG" title="Rotation relative : angle ajoute a l'orientation courante">+ ROTATE rel</button>
+            <button type="button" data-add-task="ROTATE_ABS_DEG" title="Rotation absolue : angle final dans le repere table">+ ROTATE abs</button>
+            <button type="button" data-add-task="MANIPULATION">+ MANIPULATION</button>
+            <button type="button" data-add-task="WAIT">+ WAIT</button>
+            <button type="button" data-add-task="SPEED">+ SPEED</button>
+            <button type="button" data-add-task="ELEMENT_DELETE">+ DELETE_ZONE</button>
+            <button type="button" data-add-task="ELEMENT_ADD">+ ADD_ZONE</button>
+        </fieldset>
+
+        <fieldset style="margin-top:2px;" id="editorInstructionsFieldset">
             <legend>Instructions</legend>
-            <table>
-                <tr>
-                    <th>PMX</th>
-                    <th>Autre</th>
-                </tr>
-                <tr>
-                    <td><button id="pmxNext" onclick="nextInstruction();" disabled>Suivant</button></td>
-                    <td><button onclick="connectSocket();">Live</button></td>
-                </tr>
-                <tr>
-                    <td><button id="pmxAuto" onclick="autoPlay();" disabled>Automatique</button></td>
-                    <td><button onclick="autoPlay();">Full auto</button></td>
-                </tr>
-            </table>
-
+            <div>
+                <button type="button" id="editorAddInstruction">+ Nouvelle instruction</button>
+            </div>
+            <div id="editorInstructionsList" style="font-size:14px; margin-top:2px;">
+                <em>(aucune instruction)</em>
+            </div>
         </fieldset>
-        <fieldset>
-            <legend>Déplacement manuel</legend>
-            <table>
-                <tr>
-                    <th>Robot</th>
-                    <th>X (mm)</th>
-                    <th>Y (mm)</th>
-                    <th>Theta (°)</th>
-                    <th></th>
-                </tr>
-                <tr>
-                    <td>PMX</td>
-                    <td>
-                        <input style="width: 100px;" name="pmx-x" id="pmx-x" type="number"/>
-                    </td>
-                    <td>
-                        <input style="width: 100px;" name="pmx-y" id="pmx-y" type="number"/>
-                    </td>
-                    <td>
-                        <input style="width: 100px;" name="pmx-theta" id="pmx-theta" type="number"/>
-                    </td>
-                    <td>
-                        <button style="width: 150px;" onclick="moveRobot(
-                            document.getElementById('pmx-x').value,
-                            document.getElementById('pmx-y').value,
-                            document.getElementById('pmx-theta').value * Math.PI / 180
-                        );">
-                            Go
-                        </button>
-                    </td>
-                </tr>
-            </table>
+
+        <fieldset style="margin-top:2px;" id="editorTaskEditFieldset">
+            <legend>Édition task sélectionnée</legend>
+            <div id="editorTaskEditBody" style="font-size:14px;">
+                <em>(aucune task sélectionnée)</em>
+            </div>
         </fieldset>
     </div>
-
-    <table class="dataBlock">
-        <tr>
-            <th>Exécution PMX</th>
-        </tr>
-        <tr>
-            <td id="data" class="dataFieldset"></td>
-        </tr>
-    </table>
 </div>
 
 </body>

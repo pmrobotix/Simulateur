@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "desc": "Test Phase 2 : recul + banderole + avance",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "LINE", "dist": -79, "desc": "Recul pour deposer le drapeau" },
+      { "type": "MANIPULATION", "action_id": "banderole", "timeout": 2000 },
+      { "type": "WAIT", "duration_ms": 1000 },
+      { "type": "SPEED", "subtype": "SET_SPEED", "speed_percent": 40, "desc": "Vitesse reduite" },
+      { "type": "MOVEMENT", "subtype": "LINE", "dist": 150, "desc": "Avance 150mm" }
+    ]
+  },
+  {
+    "id": 2,
+    "desc": "Test bras + navigation",
+    "tasks": [
+      { "type": "MANIPULATION", "action_id": "bras_droit" },
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 600, "position_y": 400, "desc": "Aller a (600,400)" },
+      { "type": "MANIPULATION", "action_id": "bras_droit_init" },
+      { "type": "MOVEMENT", "subtype": "FACE_TO", "position_x": 300, "position_y": 130, "desc": "Face au depart" },
+      { "type": "MOVEMENT", "subtype": "PATH_TO", "position_x": 300, "position_y": 300, "desc": "Retour via A*" }
+    ]
+  },
+  {
+    "id": 3,
+    "desc": "Test action inconnue (doit etre skippe sans fail)",
+    "tasks": [
+      { "type": "MANIPULATION", "action_id": "action_qui_existe_pas" },
+      { "type": "MOVEMENT", "subtype": "LINE", "dist": -50 }
+    ]
+  }
+]
