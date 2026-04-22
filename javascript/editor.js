@@ -4,7 +4,7 @@
 // Mode edition qui permet de construire un strategyPMX0.json par clics canvas
 // et formulaires lateraux.
 //
-// Format JSON produit : voir robot/md/STRATEGY_JSON_FORMAT.md
+// Format JSON produit : voir STRATEGY_JSON_FORMAT.md (copie locale ; maitre : robot/md/)
 // ============================================================================
 
 window.editor = {
