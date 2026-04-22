@@ -186,13 +186,13 @@ body {
     writing-mode: vertical-rl;
     transform: rotate(180deg);
     font-size: 14px;
-    padding: 8px 4px;
+    padding: 24px 4px;
     cursor: pointer;
     border: none;
     border-top: 2px solid #888;
     background: #e0e0e0;
     color: #222;
-    min-height: 80px;
+    min-height: 240px;
     box-sizing: border-box;
 }
 .editorToggleCol .editorToggleLabel.active {
@@ -501,6 +501,26 @@ button, input, select {
 .configVisuelleRow .cfgLabel {
     min-width: auto;
     font-weight: bold;
+}
+/* Colonne verticale : bouton au-dessus, slider + % dessous */
+.configVisuelleCol {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
+    flex: 0 0 auto;
+}
+.configVisuelleCol button {
+    width: 100%;
+    box-sizing: border-box;
+}
+.configVisuelleCol input[type="range"] {
+    width: 90px;
+}
+.configVisuelleCol span {
+    font-size: 12px;
+    text-align: center;
+    min-width: 40px;
 }
 
 /* Deplacement manuel : tout sur une ligne, Go a droite */

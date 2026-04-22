@@ -1841,6 +1841,14 @@ function editorCreateNewStrategy() {
     window.editor.loadedStratFileName = null;
     window.editor.selectedTaskRef = null;
     window.editor.dirty = false;
+    // Reset du moteur de playback : sinon Suivant/Auto continuent a jouer
+    // la strat precedemment chargee (ex: LOAD PMX0 puis CREATE -> PMX0 en memoire).
+    if (typeof stratSimulator !== 'undefined') stratSimulator = [];
+    if (typeof stratIndex !== 'undefined') stratIndex = 0;
+    var btnNext = document.getElementById('pmxNext');
+    var btnAuto = document.getElementById('pmxAuto');
+    if (btnNext) btnNext.disabled = true;
+    if (btnAuto) btnAuto.disabled = true;
     var nameInput = document.getElementById('editorStratName');
     if (nameInput) nameInput.value = 'NEW';
     editorRenderInstructionsList();

@@ -45,28 +45,33 @@
         <details class="collapsibleBlock" id="configVisuelleBlock">
             <summary>Config visuelle</summary>
             <div class="configVisuelleRow">
-                <button type="button" onclick="toggleTableImage();" title="Afficher/masquer l'image de la table">Table</button>
-                <input type="range" id="tableOpacity" min="0" max="100" value="35"
-                    oninput="document.getElementById('table').style.opacity = this.value / 100;
-                             document.getElementById('opacityVal').textContent = this.value + '%';">
-                <span id="opacityVal">35%</span>
-
-                <button onclick="showGrid();">Quadrillage</button>
-                <input type="range" id="gridOpacity" min="0" max="100" value="60"
-                    oninput="setGridOpacity(this.value / 100);
-                             document.getElementById('gridOpacityVal').textContent = this.value + '%';">
-                <span id="gridOpacityVal">60%</span>
-
-                <button onclick="showZones();">Zones</button>
-                <input type="range" id="zonesOpacity" min="0" max="100" value="60"
-                    oninput="setZonesOpacity(this.value / 100);
-                             document.getElementById('zonesOpacityVal').textContent = this.value + '%';">
-                <span id="zonesOpacityVal">60%</span>
-
-                <span class="cfgLabel">Zoom</span>
-                <input type="range" id="canvasZoom" min="20" max="100" value="50"
-                    oninput="setCanvasZoom(this.value);">
-                <span id="zoomVal">50%</span>
+                <div class="configVisuelleCol">
+                    <button type="button" onclick="toggleTableImage();" title="Afficher/masquer l'image de la table">Table</button>
+                    <input type="range" id="tableOpacity" min="0" max="100" value="35"
+                        oninput="document.getElementById('table').style.opacity = this.value / 100;
+                                 document.getElementById('opacityVal').textContent = this.value + '%';">
+                    <span id="opacityVal">35%</span>
+                </div>
+                <div class="configVisuelleCol">
+                    <button onclick="showGrid();">Quadrillage</button>
+                    <input type="range" id="gridOpacity" min="0" max="100" value="60"
+                        oninput="setGridOpacity(this.value / 100);
+                                 document.getElementById('gridOpacityVal').textContent = this.value + '%';">
+                    <span id="gridOpacityVal">60%</span>
+                </div>
+                <div class="configVisuelleCol">
+                    <button onclick="showZones();">Zones</button>
+                    <input type="range" id="zonesOpacity" min="0" max="100" value="60"
+                        oninput="setZonesOpacity(this.value / 100);
+                                 document.getElementById('zonesOpacityVal').textContent = this.value + '%';">
+                    <span id="zonesOpacityVal">60%</span>
+                </div>
+                <div class="configVisuelleCol">
+                    <span class="cfgLabel">Zoom</span>
+                    <input type="range" id="canvasZoom" min="20" max="100" value="50"
+                        oninput="setCanvasZoom(this.value);">
+                    <span id="zoomVal">50%</span>
+                </div>
             </div>
         </details>
 
@@ -148,6 +153,8 @@
                     <span class="legendItem"><span class="legendSwatch" style="background:rgba(180,0,255,1)"></span>ORBITAL_TURN_DEG</span>
                     <span class="legendItem"><span class="legendSwatch" style="background:rgba(140,0,200,0.8)"></span>rotation ABSOLUE (FACE_*, ROTATE_ABS, align, _AND_ABS)</span>
                     <span class="legendItem"><span class="legendSwatch" style="background:rgba(255,90,0,0.9)"></span>rotation RELATIVE (ROTATE_DEG, _AND_ROTATE_REL)</span>
+                </div>
+                <div class="legendColors">
                     <span class="legendItem"><span class="legendSwatch" style="width:12px; height:12px; border-radius:50%; background:rgba(255,220,80,0.9); border:1px solid #888;"></span>M/W/S/E : MANIPULATION / WAIT / SPEED / ELEMENT</span>
                 </div>
                 <div class="legendColors">
