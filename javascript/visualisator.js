@@ -253,8 +253,24 @@ var stratSimulator;
 var stratIndex = 0;
 var timestampLog;
 
-var rotationTime = 100;
-var moveTime = 600;
+// Temps de base pour les animations (ms). Modifiables via le slider "Vitesse
+// playback" via setPlaybackSpeedFactor() : les temps effectifs sont divises par
+// le facteur (factor=2 => deux fois plus rapide).
+var BASE_ROTATION_TIME = 100;
+var BASE_MOVE_TIME = 600;
+var playbackSpeedFactor = 1;
+var rotationTime = BASE_ROTATION_TIME;
+var moveTime = BASE_MOVE_TIME;
+function setPlaybackSpeedFactor(factor) {
+    factor = parseFloat(factor) || 1;
+    if (factor < 0.1) factor = 0.1;
+    if (factor > 10) factor = 10;
+    playbackSpeedFactor = factor;
+    rotationTime = BASE_ROTATION_TIME / factor;
+    moveTime = BASE_MOVE_TIME / factor;
+    var lbl = document.getElementById('playbackSpeedVal');
+    if (lbl) lbl.textContent = factor.toFixed(2) + 'x';
+}
 var detected = [];
 // Shapes tracant les deplacements du robot (ligne colorees) ; nettoyees au reset.
 var pathShapes = [];
@@ -309,6 +325,9 @@ function initComplete(currentYear, start) {
 
     // Editeur de strategie (optionnel: editor.js peut ne pas etre charge)
     if (typeof editorInit === 'function') editorInit(start);
+
+    // Affichage quadrillage actif par defaut
+    showGrid();
 
     var inputs = document.querySelectorAll('.inputfile');
     Array.prototype.forEach.call(inputs, function (input) {
@@ -384,15 +403,21 @@ function drawArrowHead(x, y, dirX, dirY, color, size) {
  * (FACE_TO, ROTATE_*). Parametres : centre en coord canvas, angles en rad PMX.
  * Prend l'arc le plus court (±π). La fleche indique le sens de rotation.
  */
-function drawRotationArc(cx, cy, thetaStart, thetaEnd, dashed) {
+function drawRotationArc(cx, cy, thetaStart, thetaEnd, dashed, rotKind) {
     var delta = thetaEnd - thetaStart;
     while (delta > Math.PI) delta -= 2 * Math.PI;
     while (delta < -Math.PI) delta += 2 * Math.PI;
     if (Math.abs(delta) < 0.01) return;
 
     var r = 60;
-    var strokeCol = 'rgba(140,0,200,0.9)';
-    var fillCol = 'rgba(140,0,200,0.25)';
+    var strokeCol, fillCol;
+    if (rotKind === 'rel') {
+        strokeCol = 'rgba(255,90,0,0.9)';
+        fillCol = 'rgba(255,90,0,0.25)';
+    } else {
+        strokeCol = 'rgba(140,0,200,0.9)';
+        fillCol = 'rgba(140,0,200,0.25)';
+    }
 
     // Secteur plein (pie slice) : 2 bords radiaux + arc echantillonne
     var shape = new createjs.Shape();
@@ -527,7 +552,7 @@ function playManualPath(waypoints, fromX, fromY, strokeColor) {
  * @param finalRotation optionnel : angle (rad) a atteindre APRES le mouvement.
  *                   Si defini, ajoute une 3eme phase de rotation.
  */
-function moveRobot(x, y, rotation, speed, auto = false, strokeColor = 'rgba(255,20,147,1)', fromX, fromY, finalRotation, dashed, fromTheta) {
+function moveRobot(x, y, rotation, speed, auto = false, strokeColor = 'rgba(255,20,147,1)', fromX, fromY, finalRotation, dashed, fromTheta, rotKindPre, rotKindPost) {
     var cx = toCanvasX(x);
     var cy = toCanvasY(y);
     var startX = (fromX !== undefined) ? toCanvasX(fromX) : pmx.x;
@@ -542,7 +567,7 @@ function moveRobot(x, y, rotation, speed, auto = false, strokeColor = 'rgba(255,
     // (motion heading). Visible si rotation delta notable (tasks de motion ET
     // pure rotations FACE_*/ROTATE_*).
     if (Math.abs(rotation - startTheta) > 0.01) {
-        drawRotationArc(startX, startY, startTheta, rotation, dashed);
+        drawRotationArc(startX, startY, startTheta, rotation, dashed, rotKindPre);
     }
     var hasDisp = (Math.abs(cx - startX) + Math.abs(cy - startY)) > 1;
     if (hasDisp) {
@@ -558,7 +583,7 @@ function moveRobot(x, y, rotation, speed, auto = false, strokeColor = 'rgba(255,
         // Secteur de post-rotation (composites : rotation finale apres arrivee)
         if (finalRotation !== undefined && finalRotation !== null
                 && Math.abs(finalRotation - rotation) > 0.01) {
-            drawRotationArc(cx, cy, rotation, finalRotation, dashed);
+            drawRotationArc(cx, cy, rotation, finalRotation, dashed, rotKindPost);
         }
     }
 
@@ -1283,16 +1308,22 @@ async function playSimulatorInstruction(task, divId, auto = false) {
                     finalRot = target.theta;
                 }
                 var fromTheta = playbackPose.theta;
+                // Couleurs rotation : rel (orange) pour ROTATE_DEG / _AND_ROTATE_REL_DEG,
+                // abs (violet) pour tout le reste (alignements, FACE_*, ROTATE_ABS_DEG, composites ABS)
+                var rotPre = (st === 'ROTATE_DEG') ? 'rel' : 'abs';
+                var rotPost = (st.indexOf('_AND_ROTATE_REL_DEG') !== -1) ? 'rel' : 'abs';
                 moveRobot(target.x, target.y, heading, undefined, false,
-                    strokeColor || 'rgba(255,20,147,1)', fromX, fromY, finalRot, dashed, fromTheta);
+                    strokeColor || 'rgba(255,20,147,1)', fromX, fromY, finalRot, dashed, fromTheta, rotPre, rotPost);
                 playbackPose = { x: target.x, y: target.y, theta: target.theta };
             }
         }
     }
 
-    // Pause adaptee : composites +1 rotation, MANUAL_PATH = N segments
+    // Pause adaptee : composites +1 rotation, MANUAL_PATH = N segments.
+    // Le WAIT strategique (duration_ms) est egalement divise par le facteur de
+    // vitesse de lecture pour garder une coherence visuelle avec les animations.
     var delay = (task.type === 'WAIT' && task.duration_ms)
-        ? task.duration_ms
+        ? (task.duration_ms / (playbackSpeedFactor || 1))
         : (moveTime + rotationTime);
     var st2 = task.subtype || '';
     if (task.type === 'MOVEMENT' && st2.indexOf('_AND_') !== -1) {

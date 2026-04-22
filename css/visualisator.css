@@ -110,6 +110,95 @@ body {
     position: sticky;                   /* reste visible lors du scroll page */
     top: 0;
 }
+
+/* Colonne verticale compacte : palette de commandes + label toggle edition
+   occupe l'espace du bouton vertical "edition" (droite du terrain) */
+.editorToggleCol {
+    display: flex;
+    flex-direction: column;
+    align-self: flex-start;
+    flex: 0 0 auto;
+    height: 100vh;
+    box-sizing: border-box;
+    position: sticky;
+    top: 0;
+    margin: 0 2px;
+    border: 1px solid #888;
+    background: #fafafa;
+    width: 62px;
+}
+.editorToggleCol .cmdPaletteVertical {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 3px 3px;
+    align-items: stretch;
+}
+.editorToggleCol .cmdGroupTitle {
+    font-size: 9px;
+    color: #888;
+    text-align: center;
+    margin-top: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    user-select: none;
+}
+.editorToggleCol .cmdGroupTitle:first-child { margin-top: 0; }
+.editorToggleCol .cmdBtn {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 11px;
+    padding: 2px 2px;
+    line-height: 1.1;
+    cursor: pointer;
+    border: 1px solid #aaa;
+    background: #f2f2f2;
+    color: #222;
+    white-space: nowrap;
+}
+.editorToggleCol .cmdBtn:hover {
+    background: #e0e8f5;
+    border-color: #6685a8;
+}
+.editorToggleCol .cmdBtn.nonpos { border-left: 3px solid #1976d2; }
+.editorToggleCol .cmdBtn.pos    { border-left: 3px solid #d2691e; }
+.editorToggleCol .cmdBtn.active {
+    background: #4caf50;
+    color: white;
+    border-color: #2e7d32;
+    font-weight: bold;
+}
+.editorToggleCol .activeCmdLabel {
+    font-size: 10px;
+    text-align: center;
+    color: #555;
+    margin: 4px 0 2px 0;
+    padding: 2px 1px;
+    border-top: 1px dashed #ccc;
+    user-select: none;
+    min-height: 14px;
+    word-break: break-all;
+}
+.editorToggleCol .editorToggleLabel {
+    flex: 0 0 auto;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-size: 14px;
+    padding: 8px 4px;
+    cursor: pointer;
+    border: none;
+    border-top: 2px solid #888;
+    background: #e0e0e0;
+    color: #222;
+    min-height: 80px;
+    box-sizing: border-box;
+}
+.editorToggleCol .editorToggleLabel.active {
+    background: #4caf50;
+    color: white;
+}
 #fitBtn {
     font-size: 16px;
     padding: 4px 30px;
@@ -136,7 +225,7 @@ body {
 .coveringCanvas{
     width:100%; height:100%;
     position:absolute; top:0px; left:0px;
-    background-color: rgba(0,0,0,.1);
+    background-color: transparent;
 }
 .coveringButton{
     position:absolute; top:50px; left:50px;

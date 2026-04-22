@@ -34,7 +34,7 @@
 <div class="canvasColumn">
     <div class="outsideWrapper">
         <div class="insideWrapper">
-            <img id="table" alt="table" class="coveredImage" style="cursor: pointer; opacity: 0.7;" onclick="toggleZones();" title="Clic pour afficher/masquer les zones">
+            <img id="table" alt="table" class="coveredImage" style="cursor: pointer; opacity: 0.35;" onclick="toggleZones();" title="Clic pour afficher/masquer les zones">
             <canvas id="canvas" class="coveringCanvas" width="3000" height="2000"></canvas>
         </div>
     </div>
@@ -46,10 +46,10 @@
             <summary>Config visuelle</summary>
             <div class="configVisuelleRow">
                 <button type="button" onclick="toggleTableImage();" title="Afficher/masquer l'image de la table">Table</button>
-                <input type="range" id="tableOpacity" min="0" max="100" value="70"
+                <input type="range" id="tableOpacity" min="0" max="100" value="35"
                     oninput="document.getElementById('table').style.opacity = this.value / 100;
                              document.getElementById('opacityVal').textContent = this.value + '%';">
-                <span id="opacityVal">70%</span>
+                <span id="opacityVal">35%</span>
 
                 <button onclick="showGrid();">Quadrillage</button>
                 <input type="range" id="gridOpacity" min="0" max="100" value="60"
@@ -111,8 +111,19 @@
                 <button type="button" id="drawStratBtn" onclick="editorToggleDrawStrat();" title="Dessine toute la strat d'un coup (live update si edition)" disabled>🖌 Dessiner strat</button>
                 <button type="button" id="btnInstrBounds" onclick="editorToggleInstrBounds();" title="Afficher/masquer les encadres par groupe d'instruction (dans l'apercu)">📦 Groupe</button>
                 <span class="stratSep">|</span>
-                <button id="pmxNext" onclick="stepNext();" disabled>⏭ Suivant</button>
-                <button id="pmxAuto" onclick="autoPlay();" disabled>▶ Auto</button>
+                <div class="stratPlayCol">
+                    <div style="display:flex; gap:2px;">
+                        <button id="pmxNext" onclick="stepNext();" disabled>⏭ Suivant</button>
+                        <button id="pmxAuto" onclick="autoPlay();" disabled>▶ Auto</button>
+                    </div>
+                    <label style="display:flex; align-items:center; gap:4px; font-size:11px;"
+                           title="Vitesse de lecture : 0.25x = très lent, 4x = rapide">
+                        <input type="range" id="playbackSpeed" min="0.25" max="4" step="0.05" value="1"
+                            oninput="setPlaybackSpeedFactor(this.value);"
+                            style="width:120px; vertical-align:middle;"/>
+                        <span id="playbackSpeedVal">1.00x</span>
+                    </label>
+                </div>
             </div>
 
             <!-- Ligne 2 : preconfig PMX0 -->
@@ -135,7 +146,8 @@
                 </div>
                 <div class="legendColors">
                     <span class="legendItem"><span class="legendSwatch" style="background:rgba(180,0,255,1)"></span>ORBITAL_TURN_DEG</span>
-                    <span class="legendItem"><span class="legendSwatch" style="background:rgba(140,0,200,0.8)"></span>FACE_* / ROTATE_* (arc)</span>
+                    <span class="legendItem"><span class="legendSwatch" style="background:rgba(140,0,200,0.8)"></span>rotation ABSOLUE (FACE_*, ROTATE_ABS, align, _AND_ABS)</span>
+                    <span class="legendItem"><span class="legendSwatch" style="background:rgba(255,90,0,0.9)"></span>rotation RELATIVE (ROTATE_DEG, _AND_ROTATE_REL)</span>
                     <span class="legendItem"><span class="legendSwatch" style="width:12px; height:12px; border-radius:50%; background:rgba(255,220,80,0.9); border:1px solid #888;"></span>M/W/S/E : MANIPULATION / WAIT / SPEED / ELEMENT</span>
                 </div>
                 <div class="legendColors">
@@ -147,8 +159,47 @@
     </div>
 </div>
 
-<!-- DROITE : panneau editeur de strategie (toggle) -->
-<button type="button" id="editorToggleMode" class="sideToggleBtn" title="Activer/desactiver le mode edition de strategie">✏ édition ▸</button>
+<!-- DROITE : colonne palette commandes + toggle edition (dans bouton vert) -->
+<div id="editorToggleCol" class="editorToggleCol" title="Palette commandes + toggle édition">
+    <div class="cmdPaletteVertical">
+        <div class="cmdGroupTitle">Non‑pos</div>
+        <button class="cmdBtn nonpos" data-cmd="MANIPULATION" title="MANIPULATION">MANIP</button>
+        <button class="cmdBtn nonpos" data-cmd="WAIT" title="WAIT">WAIT</button>
+        <button class="cmdBtn nonpos" data-cmd="SPEED" title="SPEED">SPEED</button>
+        <button class="cmdBtn nonpos" data-cmd="ELEMENT_ADD" title="ADD_ZONE">+ZON</button>
+        <button class="cmdBtn nonpos" data-cmd="ELEMENT_DELETE" title="DELETE_ZONE">-ZON</button>
+        <div class="cmdGroupTitle">Clic canvas</div>
+        <button class="cmdBtn pos" data-cmd="LINE" title="LINE : clic = projection signée sur le heading">LINE</button>
+        <button class="cmdBtn pos" data-cmd="ROTATE_DEG" title="ROTATE relatif : clic = angle vers ce point">ROT</button>
+        <button class="cmdBtn pos" data-cmd="ROTATE_ABS_DEG" title="ROTATE absolu : clic = heading absolu vers ce point">ROTa</button>
+        <button class="cmdBtn pos" data-cmd="ORBITAL_TURN_DEG" title="ORBITAL : clic = delta heading, sens deduit">ORB</button>
+        <button class="cmdBtn pos" data-cmd="POSE_INIT" title="Placer pose initiale">INIT</button>
+        <button class="cmdBtn pos" data-cmd="GO_TO" title="GO_TO (ligne droite)">GO</button>
+        <button class="cmdBtn pos" data-cmd="PATH_TO" title="PATH_TO (A*)">PATH</button>
+        <button class="cmdBtn pos" data-cmd="MOVE_FORWARD_TO" title="MOVE_FORWARD_TO">FWD</button>
+        <button class="cmdBtn pos" data-cmd="MOVE_BACKWARD_TO" title="MOVE_BACKWARD_TO">BWD</button>
+        <button class="cmdBtn pos" data-cmd="GO_BACK_TO" title="GO_BACK_TO">GO&lt;</button>
+        <button class="cmdBtn pos" data-cmd="PATH_BACK_TO" title="PATH_BACK_TO">PATH&lt;</button>
+        <button class="cmdBtn pos" data-cmd="FACE_TO" title="FACE_TO">FACE</button>
+        <button class="cmdBtn pos" data-cmd="FACE_BACK_TO" title="FACE_BACK_TO">FACE&lt;</button>
+        <button class="cmdBtn pos" data-cmd="MANUAL_PATH" title="MANUAL_PATH (valeurs par défaut)">MPATH</button>
+        <div class="cmdGroupTitle">Composites</div>
+        <button class="cmdBtn pos" data-cmd="GO_TO_AND_ROTATE_ABS_DEG" title="GO + rotation absolue finale">GO+Ra</button>
+        <button class="cmdBtn pos" data-cmd="GO_TO_AND_ROTATE_REL_DEG" title="GO + rotation relative finale">GO+Rr</button>
+        <button class="cmdBtn pos" data-cmd="GO_TO_AND_FACE_TO" title="GO + face vers un point">GO+F</button>
+        <button class="cmdBtn pos" data-cmd="GO_TO_AND_FACE_BACK_TO" title="GO + dos vers un point">GO+F&lt;</button>
+        <button class="cmdBtn pos" data-cmd="MOVE_FORWARD_TO_AND_ROTATE_ABS_DEG" title="MOVE_FWD + rotation absolue finale">F+Ra</button>
+        <button class="cmdBtn pos" data-cmd="MOVE_FORWARD_TO_AND_ROTATE_REL_DEG" title="MOVE_FWD + rotation relative finale">F+Rr</button>
+        <button class="cmdBtn pos" data-cmd="MOVE_FORWARD_TO_AND_FACE_TO" title="MOVE_FWD + face vers un point">F+F</button>
+        <button class="cmdBtn pos" data-cmd="MOVE_FORWARD_TO_AND_FACE_BACK_TO" title="MOVE_FWD + dos vers un point">F+F&lt;</button>
+        <button class="cmdBtn pos" data-cmd="PATH_TO_AND_ROTATE_ABS_DEG" title="PATH + rotation absolue finale">P+Ra</button>
+        <button class="cmdBtn pos" data-cmd="PATH_TO_AND_ROTATE_REL_DEG" title="PATH + rotation relative finale">P+Rr</button>
+        <button class="cmdBtn pos" data-cmd="PATH_TO_AND_FACE_TO" title="PATH + face vers un point">P+F</button>
+        <button class="cmdBtn pos" data-cmd="PATH_TO_AND_FACE_BACK_TO" title="PATH + dos vers un point">P+F&lt;</button>
+        <div id="editorActiveCmdLabel" class="activeCmdLabel" title="Commande active">(aucune)</div>
+    </div>
+    <button type="button" id="editorToggleMode" class="editorToggleLabel" title="Activer/desactiver le mode edition">édition ▸</button>
+</div>
 <div id="editorSidePanel" style="display:none;">
     <div class="logHeader">
         <span>Éditeur de stratégie</span>
@@ -175,34 +226,11 @@
         </fieldset>
 
         <fieldset style="margin-top:2px;">
-            <legend>Prochain clic</legend>
-            <select id="editorNextClick" style="min-width:250px;">
-                <option value="POSE_INIT">POSE_INIT (placer robot)</option>
-                <option value="GO_TO">GO_TO</option>
-                <option value="PATH_TO" selected>PATH_TO</option>
-                <option value="MOVE_FORWARD_TO">MOVE_FORWARD_TO</option>
-                <option value="MOVE_BACKWARD_TO">MOVE_BACKWARD_TO</option>
-                <option value="FACE_TO">FACE_TO</option>
-            </select>
-            <div style="margin-top:2px;">
-                Snap :
-                <label><input type="radio" name="editorSnap" value="0" checked/>0</label>
-                <label><input type="radio" name="editorSnap" value="10"/>10</label>
-                <label><input type="radio" name="editorSnap" value="50"/>50</label>
-                <label><input type="radio" name="editorSnap" value="100"/>100 mm</label>
-            </div>
-        </fieldset>
-
-        <fieldset style="margin-top:2px;">
-            <legend>Ajouter tâche</legend>
-            <button type="button" data-add-task="LINE">+ LINE</button>
-            <button type="button" data-add-task="ROTATE_DEG" title="Rotation relative : angle ajoute a l'orientation courante">+ ROTATE rel</button>
-            <button type="button" data-add-task="ROTATE_ABS_DEG" title="Rotation absolue : angle final dans le repere table">+ ROTATE abs</button>
-            <button type="button" data-add-task="MANIPULATION">+ MANIPULATION</button>
-            <button type="button" data-add-task="WAIT">+ WAIT</button>
-            <button type="button" data-add-task="SPEED">+ SPEED</button>
-            <button type="button" data-add-task="ELEMENT_DELETE">+ DELETE_ZONE</button>
-            <button type="button" data-add-task="ELEMENT_ADD">+ ADD_ZONE</button>
+            <legend>Snap clic canvas</legend>
+            <label><input type="radio" name="editorSnap" value="0" checked/>0</label>
+            <label><input type="radio" name="editorSnap" value="10"/>10</label>
+            <label><input type="radio" name="editorSnap" value="50"/>50</label>
+            <label><input type="radio" name="editorSnap" value="100"/>100 mm</label>
         </fieldset>
 
         <fieldset style="margin-top:2px;" id="editorInstructionsFieldset">

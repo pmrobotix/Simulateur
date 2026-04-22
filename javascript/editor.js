@@ -9,7 +9,15 @@
 
 window.editor = {
     mode: 'view',                 // 'view' | 'edit'
-    nextClickAction: 'PATH_TO',   // subtype du prochain clic canvas
+    activeCommand: null,          // {cmd: 'PATH_TO', type: 'pos'} | {cmd:'LINE', type:'nonpos'} | null
+    // MANUAL_PATH en construction : null = pas en mode build, [] = en mode build
+    // (left-click canvas = +waypoint, right-click canvas = finalize)
+    manualPathBuffer: null,
+    // Tous les composites *_AND_* : construction 2-clics (1er=dest, 2e=point a regarder)
+    // null = pas en mode, {dest:{x,y}, from:{x,y,theta}} = 1er clic fait
+    composite2ndBuffer: null,
+    // Pose simulee a la fin de la strategie (mise a jour dans editorRenderLayer)
+    _lastPose: null,
     snapMm: 0,                    // 0 | 10 | 50 | 100
     strategy: {
         name: 'PMX0',             // nom court ; exports : strategy<nom>.json + init<nom>.json
@@ -122,15 +130,12 @@ function editorBindUi() {
         if (el) el.addEventListener('change', editorOnInitialPoseInputChange);
     });
 
-    // Select "prochain clic" (active pour etape 2, seul POSE_INIT fait qqch)
-    var sel = document.getElementById('editorNextClick');
-    if (sel) {
-        sel.disabled = false;
-        sel.value = window.editor.nextClickAction;
-        sel.addEventListener('change', function () {
-            window.editor.nextClickAction = this.value;
+    // Palette de commandes (boutons dans la colonne verticale verte)
+    document.querySelectorAll('.cmdBtn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            editorOnCmdPaletteClick(btn);
         });
-    }
+    });
 
     // Radios snap
     document.querySelectorAll('input[name="editorSnap"]').forEach(function (r) {
@@ -182,14 +187,79 @@ function editorBindUi() {
     var exportInitBtn = document.getElementById('editorExportInit');
     if (exportInitBtn) exportInitBtn.addEventListener('click', editorExportInit);
 
-    // Boutons "+ LINE", "+ ROTATE_DEG", etc.
-    document.querySelectorAll('[data-add-task]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            editorAddNonClickTask(this.dataset.addTask);
-        });
-    });
-
     editorRenderInstructionsList();
+}
+
+/**
+ * Clic sur un bouton de la palette commandes (.cmdBtn).
+ * - type "nonpos" : ajoute immediatement une task avec valeurs par defaut
+ * - type "pos"    : sticky -> prochain clic canvas cree la task a l'endroit cliqué.
+ *   Re-clic sur un bouton déjà actif = désactive.
+ */
+function editorOnCmdPaletteClick(btn) {
+    var cmd = btn.dataset.cmd;
+    var isPos = btn.classList.contains('pos');
+    // S'assurer que le mode edition est actif pour que les clics canvas soient pris
+    if (window.editor.mode !== 'edit') {
+        window.editor.mode = 'edit';
+        editorApplyMode();
+    }
+    if (!isPos) {
+        // Ajout immediat, pas de sticky
+        editorAddNonClickTask(cmd);
+        // Flash visuel
+        btn.classList.add('active');
+        setTimeout(function () { btn.classList.remove('active'); }, 150);
+        return;
+    }
+    // Pos : toggle sticky
+    var cur = window.editor.activeCommand;
+    if (cur && cur.cmd === cmd) {
+        // Desactivation : annule tout build en cours
+        window.editor.manualPathBuffer = null;
+        window.editor.composite2ndBuffer = null;
+        window.editor.activeCommand = null;
+        editorRenderLayer();
+    } else {
+        // Nouvelle cmd : reset des buffers des autres modes
+        window.editor.manualPathBuffer = null;
+        window.editor.composite2ndBuffer = null;
+        window.editor.activeCommand = { cmd: cmd, type: 'pos' };
+        if (cmd === 'MANUAL_PATH') {
+            window.editor.manualPathBuffer = [];
+        }
+        editorRenderLayer();
+    }
+    editorRefreshActiveCmdUi();
+}
+
+/**
+ * Met a jour le rendu visuel (bouton actif + label) de la palette.
+ */
+function editorRefreshActiveCmdUi() {
+    var active = window.editor.activeCommand;
+    document.querySelectorAll('.cmdBtn.pos').forEach(function (b) {
+        if (active && b.dataset.cmd === active.cmd) b.classList.add('active');
+        else b.classList.remove('active');
+    });
+    var lbl = document.getElementById('editorActiveCmdLabel');
+    if (lbl) {
+        if (active && active.cmd === 'MANUAL_PATH') {
+            var n = (window.editor.manualPathBuffer || []).length;
+            lbl.textContent = 'MPATH (' + n + ' wp) clic-droit=fin';
+        } else if (active && editorIsFace2Click(active.cmd)) {
+            var step2Label = /_AND_(FACE_TO|FACE_BACK_TO)$/.test(active.cmd)
+                ? 'clic FACE' : 'clic ANGLE';
+            lbl.textContent = active.cmd + (window.editor.composite2ndBuffer
+                ? ' → ' + step2Label : ' → clic DEST');
+        } else {
+            lbl.textContent = active ? active.cmd : '(aucune)';
+        }
+    }
+    var canvas = document.getElementById('canvas');
+    if (canvas && window.editor.mode === 'edit') {
+        canvas.style.cursor = active ? 'crosshair' : 'pointer';
+    }
 }
 
 function editorToggleMode() {
@@ -208,12 +278,22 @@ function editorApplyMode() {
     var canvas = document.getElementById('canvas');
 
     if (toggleBtn) {
-        toggleBtn.textContent = isEdit ? '✏ édition ◂' : '✏ édition ▸';
-        toggleBtn.style.backgroundColor = isEdit ? '#4caf50' : '';
-        toggleBtn.style.color = isEdit ? 'white' : '';
+        toggleBtn.textContent = isEdit ? 'édition ◂' : 'édition ▸';
+        toggleBtn.classList.toggle('active', isEdit);
     }
     if (sidePanel) sidePanel.style.display = isEdit ? 'flex' : 'none';
-    if (canvas) canvas.style.cursor = isEdit ? 'crosshair' : 'pointer';
+    if (canvas) {
+        canvas.style.cursor = isEdit
+            ? (window.editor.activeCommand ? 'crosshair' : 'pointer')
+            : 'pointer';
+    }
+    if (!isEdit) {
+        // Reset activeCommand + buffers quand on quitte l'edition
+        window.editor.activeCommand = null;
+        window.editor.manualPathBuffer = null;
+        window.editor.composite2ndBuffer = null;
+        editorRefreshActiveCmdUi();
+    }
 
     // Layer editeur visible si edit mode OU si "Dessiner strat" actif
     if (window.editor._layer) {
@@ -274,9 +354,9 @@ function editorOnInitialPoseInputChange() {
     var iy = document.getElementById('editorInitY');
     var ith = document.getElementById('editorInitTheta');
     var p = window.editor.initialPose;
-    if (ix) p.x = parseFloat(ix.value) || 0;
-    if (iy) p.y = parseFloat(iy.value) || 0;
-    if (ith) p.theta = (parseFloat(ith.value) || 0) * Math.PI / 180;
+    if (ix) p.x = editorRound2(parseFloat(ix.value) || 0);
+    if (iy) p.y = editorRound2(parseFloat(iy.value) || 0);
+    if (ith) p.theta = (editorRound2(parseFloat(ith.value) || 0)) * Math.PI / 180;
     editorMarkDirty();
     editorUpdateRobotFromInitialPose();
     editorRenderLayer();
@@ -297,14 +377,22 @@ function editorUpdateRobotFromInitialPose() {
 /**
  * Snap a la grille active (0 = pas de snap).
  */
+/**
+ * Arrondit un nombre a 2 chiffres apres la virgule (evite les decimales
+ * parasites de Math.round(x/s)*s et les coords brutes du canvas).
+ */
+function editorRound2(v) {
+    if (typeof v !== 'number' || !isFinite(v)) return v;
+    return Math.round(v * 100) / 100;
+}
 function editorSnap(v) {
     var s = window.editor.snapMm;
-    return s > 0 ? Math.round(v / s) * s : v;
+    return s > 0 ? Math.round(v / s) * s : editorRound2(v);
 }
 
 /**
- * Handler createjs : un clic canvas en mode edition dispatche selon
- * `nextClickAction`.
+ * Handler createjs : un clic canvas en mode edition dispatche selon la
+ * commande sticky active de la palette (activeCommand).
  */
 function editorOnCanvasMouseDown(evt) {
     if (window.editor.mode !== 'edit') return;
@@ -318,11 +406,13 @@ function editorOnCanvasMouseDown(evt) {
 }
 
 /**
- * Dispatch du clic selon l'action selectionnee dans le dropdown.
+ * Dispatch du clic canvas selon la commande sticky active (palette verticale).
  */
 function editorHandleCanvasClick(pmxX, pmxY) {
-    var action = window.editor.nextClickAction;
-    if (action === 'POSE_INIT') {
+    var active = window.editor.activeCommand;
+    if (!active) return;
+    var cmd = active.cmd;
+    if (cmd === 'POSE_INIT') {
         window.editor.initialPose.x = pmxX;
         window.editor.initialPose.y = pmxY;
         editorMarkDirty();
@@ -331,20 +421,147 @@ function editorHandleCanvasClick(pmxX, pmxY) {
         editorRenderLayer();
         return;
     }
-    // Primitives 1-clic MOVEMENT : GO_TO, PATH_TO, MOVE_FORWARD_TO,
-    // MOVE_BACKWARD_TO, FACE_TO
-    var movementSubtypes = ['GO_TO', 'PATH_TO', 'MOVE_FORWARD_TO',
-                            'MOVE_BACKWARD_TO', 'FACE_TO'];
-    if (movementSubtypes.indexOf(action) !== -1) {
-        var task = {
-            type: 'MOVEMENT',
-            subtype: action,
-            position_x: pmxX,
-            position_y: pmxY,
-            desc: action + ' (' + pmxX + ',' + pmxY + ')'
-        };
-        editorAppendTask(task);
+    if (cmd === 'MANUAL_PATH') {
+        // Ajoute un waypoint au buffer en cours (le task est cree au clic-droit)
+        if (!window.editor.manualPathBuffer) window.editor.manualPathBuffer = [];
+        window.editor.manualPathBuffer.push([pmxX, pmxY]);
+        editorRefreshActiveCmdUi();
+        editorRenderLayer();
+        return;
     }
+    // LINE / ROTATE_DEG / ROTATE_ABS_DEG / ORBITAL_TURN_DEG : un clic suffit,
+    // la valeur est deduite de la pose simulee courante et du point clique.
+    if (cmd === 'LINE' || cmd === 'ROTATE_DEG' || cmd === 'ROTATE_ABS_DEG'
+            || cmd === 'ORBITAL_TURN_DEG') {
+        var fromP = window.editor._lastPose
+            || { x: window.editor.initialPose.x, y: window.editor.initialPose.y,
+                 theta: window.editor.initialPose.theta };
+        var dx = pmxX - fromP.x, dy = pmxY - fromP.y;
+        if (cmd === 'LINE') {
+            // Projection signee sur le heading courant (forward > 0, backward < 0)
+            var proj = dx * Math.cos(fromP.theta) + dy * Math.sin(fromP.theta);
+            var dist = Math.round(proj);
+            editorAppendTask({
+                type: 'MOVEMENT', subtype: 'LINE', dist: dist,
+                desc: 'LINE dist=' + dist
+            });
+            return;
+        }
+        var desired = Math.atan2(dy, dx);
+        if (cmd === 'ROTATE_ABS_DEG') {
+            var absDeg = editorRound2(desired * 180 / Math.PI);
+            editorAppendTask({
+                type: 'MOVEMENT', subtype: 'ROTATE_ABS_DEG', angle_deg: absDeg,
+                desc: 'ROTATE abs ' + absDeg + '°'
+            });
+            return;
+        }
+        // ROTATE_DEG / ORBITAL : delta relatif [-180,180]
+        var dRad = desired - fromP.theta;
+        while (dRad > Math.PI) dRad -= 2 * Math.PI;
+        while (dRad < -Math.PI) dRad += 2 * Math.PI;
+        if (cmd === 'ROTATE_DEG') {
+            var relDeg = editorRound2(dRad * 180 / Math.PI);
+            editorAppendTask({
+                type: 'MOVEMENT', subtype: 'ROTATE_DEG', angle_deg: relDeg,
+                desc: 'ROTATE rel ' + relDeg + '°'
+            });
+            return;
+        }
+        // ORBITAL_TURN_DEG : amplitude + sens deduit (turn_right = delta < 0 = CW)
+        var orbDeg = editorRound2(Math.abs(dRad * 180 / Math.PI));
+        var turnRight = (dRad < 0);
+        editorAppendTask({
+            type: 'MOVEMENT', subtype: 'ORBITAL_TURN_DEG',
+            angle_deg: orbDeg, forward: true, turn_right: turnRight,
+            desc: 'ORBITAL ' + orbDeg + '° ' + (turnRight ? 'droite' : 'gauche') + ' fwd'
+        });
+        return;
+    }
+    if (editorIsFace2Click(cmd)) {
+        // Construction 2-clics : 1er clic = dest, 2e clic = point a regarder
+        var buf1 = window.editor.composite2ndBuffer;
+        if (!buf1) {
+            // Capture la pose simulee actuelle pour pouvoir calculer l'arrival heading
+            var from = window.editor._lastPose
+                || { x: window.editor.initialPose.x, y: window.editor.initialPose.y,
+                     theta: window.editor.initialPose.theta };
+            window.editor.composite2ndBuffer = {
+                dest: { x: pmxX, y: pmxY },
+                from: { x: from.x, y: from.y, theta: from.theta }
+            };
+            editorRefreshActiveCmdUi();
+            editorRenderLayer();
+            return;
+        }
+        // 2e clic : finalise la task selon le suffixe du composite
+        var dest = buf1.dest, from = buf1.from;
+        var t = {
+            type: 'MOVEMENT', subtype: cmd,
+            position_x: dest.x, position_y: dest.y
+        };
+        if (/_AND_FACE_TO$|_AND_FACE_BACK_TO$/.test(cmd)) {
+            t.face_x = pmxX;
+            t.face_y = pmxY;
+            t.desc = cmd + ' dest=(' + dest.x + ',' + dest.y
+                + ') face=(' + pmxX + ',' + pmxY + ')';
+        } else if (/_AND_ROTATE_ABS_DEG$/.test(cmd)) {
+            var absDeg = Math.atan2(pmxY - dest.y, pmxX - dest.x) * 180 / Math.PI;
+            t.final_angle_deg = editorRound2(absDeg);
+            t.desc = cmd + ' dest=(' + dest.x + ',' + dest.y
+                + ') final=' + t.final_angle_deg + '°';
+        } else if (/_AND_ROTATE_REL_DEG$/.test(cmd)) {
+            var arrival = Math.atan2(dest.y - from.y, dest.x - from.x);
+            var desired = Math.atan2(pmxY - dest.y, pmxX - dest.x);
+            var relRad = desired - arrival;
+            while (relRad > Math.PI) relRad -= 2 * Math.PI;
+            while (relRad < -Math.PI) relRad += 2 * Math.PI;
+            t.rotate_rel_deg = editorRound2(relRad * 180 / Math.PI);
+            t.desc = cmd + ' dest=(' + dest.x + ',' + dest.y
+                + ') rel=' + t.rotate_rel_deg + '°';
+        }
+        window.editor.composite2ndBuffer = null;
+        editorAppendTask(t);
+        editorRefreshActiveCmdUi();
+        return;
+    }
+    // Toutes les autres positionnelles (primitives + composites) :
+    // delègue a editorAddNonClickTask avec coords overridees.
+    editorAddNonClickTask(cmd, pmxX, pmxY);
+}
+
+/**
+ * Indique si une commande est un composite *_AND_* (construction 2-clics :
+ * 1er = destination du mouvement, 2e = point a regarder apres arrivee).
+ * Couvre tous les _AND_FACE_TO / _AND_FACE_BACK_TO / _AND_ROTATE_ABS_DEG /
+ * _AND_ROTATE_REL_DEG.
+ */
+function editorIsFace2Click(cmd) {
+    return /_AND_(FACE_TO|FACE_BACK_TO|ROTATE_ABS_DEG|ROTATE_REL_DEG)$/.test(cmd || '');
+}
+
+/**
+ * Finalise le MANUAL_PATH en cours de construction : cree la task avec les
+ * waypoints accumules et vide le buffer.
+ */
+function editorFinalizeManualPath() {
+    var buf = window.editor.manualPathBuffer;
+    if (!buf || buf.length === 0) {
+        window.editor.manualPathBuffer = null;
+        editorRenderLayer();
+        return;
+    }
+    var t = {
+        type: 'MOVEMENT',
+        subtype: 'MANUAL_PATH',
+        waypoints: buf.slice(),
+        desc: 'MANUAL_PATH (' + buf.length + ' wp)'
+    };
+    window.editor.manualPathBuffer = null;
+    // On sort du mode MANUAL_PATH une fois finalise
+    window.editor.activeCommand = null;
+    editorAppendTask(t);
+    editorRefreshActiveCmdUi();
 }
 
 // ============================================================================
@@ -408,33 +625,90 @@ function editorAppendTask(task) {
  * Ajoute une task non-clic avec des valeurs par defaut. L'utilisateur les edite
  * ensuite dans le form d'edition (ouvert automatiquement via selection).
  */
-function editorAddNonClickTask(kind) {
+function editorAddNonClickTask(kind, overrideX, overrideY) {
+    var defX, defY;
+    if (typeof overrideX === 'number' && typeof overrideY === 'number') {
+        // Valeurs deja passees par editorSnap : conserve la precision 2 decimales
+        defX = editorRound2(overrideX);
+        defY = editorRound2(overrideY);
+    } else {
+        // Default position: playback pose si defini, sinon 500,500
+        var p = (typeof playbackPose !== 'undefined' && playbackPose)
+            ? playbackPose
+            : (window.editor.initialPose || { x: 500, y: 500, theta: Math.PI / 2 });
+        defX = editorRound2(p.x || 500);
+        defY = editorRound2(p.y || 500);
+    }
     var t;
     switch (kind) {
+        // Non-geometrique
         case 'LINE':
-            t = { type: 'MOVEMENT', subtype: 'LINE', dist: 100, desc: 'LINE dist=100' };
-            break;
+            t = { type: 'MOVEMENT', subtype: 'LINE', dist: 100, desc: 'LINE dist=100' }; break;
         case 'ROTATE_DEG':
-            t = { type: 'MOVEMENT', subtype: 'ROTATE_DEG', angle_deg: 90, desc: 'ROTATE rel +90°' };
-            break;
+            t = { type: 'MOVEMENT', subtype: 'ROTATE_DEG', angle_deg: 90, desc: 'ROTATE rel +90°' }; break;
         case 'ROTATE_ABS_DEG':
-            t = { type: 'MOVEMENT', subtype: 'ROTATE_ABS_DEG', angle_deg: 0, desc: 'ROTATE abs 0° (terrain)' };
-            break;
+            t = { type: 'MOVEMENT', subtype: 'ROTATE_ABS_DEG', angle_deg: 0, desc: 'ROTATE abs 0°' }; break;
         case 'MANIPULATION':
-            t = { type: 'MANIPULATION', action_id: 'a_definir', timeout: 2000, desc: 'MANIPULATION a_definir' };
-            break;
+            t = { type: 'MANIPULATION', action_id: 'a_definir', timeout: 2000, desc: 'MANIPULATION a_definir' }; break;
         case 'WAIT':
-            t = { type: 'WAIT', duration_ms: 500, desc: 'WAIT 500ms' };
-            break;
+            t = { type: 'WAIT', duration_ms: 500, desc: 'WAIT 500ms' }; break;
         case 'SPEED':
-            t = { type: 'SPEED', subtype: 'SET_SPEED', speed_percent: 50, desc: 'SPEED 50%' };
-            break;
+            t = { type: 'SPEED', subtype: 'SET_SPEED', speed_percent: 50, desc: 'SPEED 50%' }; break;
         case 'ELEMENT_DELETE':
-            t = { type: 'ELEMENT', subtype: 'DELETE_ZONE', item_id: 'a_definir', desc: 'DELETE_ZONE a_definir' };
-            break;
+            t = { type: 'ELEMENT', subtype: 'DELETE_ZONE', item_id: 'a_definir', desc: 'DELETE_ZONE a_definir' }; break;
         case 'ELEMENT_ADD':
-            t = { type: 'ELEMENT', subtype: 'ADD_ZONE', item_id: 'a_definir', desc: 'ADD_ZONE a_definir' };
+            t = { type: 'ELEMENT', subtype: 'ADD_ZONE', item_id: 'a_definir', desc: 'ADD_ZONE a_definir' }; break;
+
+        // Primitives MOVEMENT positionnelles
+        case 'GO_TO':
+        case 'PATH_TO':
+        case 'MOVE_FORWARD_TO':
+        case 'MOVE_BACKWARD_TO':
+        case 'GO_BACK_TO':
+        case 'PATH_BACK_TO':
+        case 'FACE_TO':
+        case 'FACE_BACK_TO':
+            t = { type: 'MOVEMENT', subtype: kind, position_x: defX, position_y: defY,
+                  desc: kind + ' (' + defX + ',' + defY + ')' };
             break;
+
+        // Autres primitives
+        case 'ORBITAL_TURN_DEG':
+            t = { type: 'MOVEMENT', subtype: 'ORBITAL_TURN_DEG', angle_deg: 45,
+                  forward: true, turn_right: false, desc: 'ORBITAL 45° gauche forward' };
+            break;
+        case 'MANUAL_PATH':
+            // Default si appele via editorAddNonClickTask (fallback). L'usage
+            // normal passe par le mode build interactif (clic-gauche = +wp,
+            // clic-droit = fin) declenche depuis la palette.
+            t = { type: 'MOVEMENT', subtype: 'MANUAL_PATH',
+                  waypoints: [[defX, defY]],
+                  desc: 'MANUAL_PATH (1 wp)' };
+            break;
+
+        // Composites : dest + complement
+        case 'GO_TO_AND_ROTATE_ABS_DEG':
+        case 'MOVE_FORWARD_TO_AND_ROTATE_ABS_DEG':
+        case 'PATH_TO_AND_ROTATE_ABS_DEG':
+            t = { type: 'MOVEMENT', subtype: kind, position_x: defX, position_y: defY,
+                  final_angle_deg: 0, desc: kind };
+            break;
+        case 'GO_TO_AND_ROTATE_REL_DEG':
+        case 'MOVE_FORWARD_TO_AND_ROTATE_REL_DEG':
+        case 'PATH_TO_AND_ROTATE_REL_DEG':
+            t = { type: 'MOVEMENT', subtype: kind, position_x: defX, position_y: defY,
+                  rotate_rel_deg: 0, desc: kind };
+            break;
+        case 'GO_TO_AND_FACE_TO':
+        case 'MOVE_FORWARD_TO_AND_FACE_TO':
+        case 'PATH_TO_AND_FACE_TO':
+        case 'GO_TO_AND_FACE_BACK_TO':
+        case 'MOVE_FORWARD_TO_AND_FACE_BACK_TO':
+        case 'PATH_TO_AND_FACE_BACK_TO':
+            t = { type: 'MOVEMENT', subtype: kind, position_x: defX, position_y: defY,
+                  face_x: defX + 200, face_y: defY, desc: kind };
+            break;
+
         default:
             return;
     }
@@ -489,7 +763,7 @@ function editorRenderInstructionsList() {
         html += '<div style="padding:2px 6px; display:flex; flex-wrap:wrap; gap:4px 8px;">';
         html += '<label title="Points attendus si succes">points: <input type="number" style="width:60px;" data-instr-meta="points:' + iInstr + '" value="' + editorEscapeAttr(instr.points != null ? instr.points : '') + '"/></label>';
         html += '<label title="Priorite (plus eleve = choisi en premier)">priority: <input type="number" style="width:60px;" data-instr-meta="priority:' + iInstr + '" value="' + editorEscapeAttr(instr.priority != null ? instr.priority : '') + '"/></label>';
-        html += '<label title="Duree estimee en secondes (pour gestion du temps restant)">estDur: <input type="number" step="0.5" style="width:60px;" data-instr-meta="estimatedDurationSec:' + iInstr + '" value="' + editorEscapeAttr(instr.estimatedDurationSec != null ? instr.estimatedDurationSec : '') + '"/></label>';
+        html += '<label title="estimatedDurationSec : duree estimee en secondes (pour gestion du temps restant)">EDSec: <input type="number" step="0.5" style="width:60px;" data-instr-meta="estimatedDurationSec:' + iInstr + '" value="' + editorEscapeAttr(instr.estimatedDurationSec != null ? instr.estimatedDurationSec : '') + '"/></label>';
         html += '<label title="Flag requis pour que l\'instruction s\'execute (skip sinon)">needed_flag: <input type="text" style="width:120px;" data-instr-meta="needed_flag:' + iInstr + '" value="' + editorEscapeAttr(instr.needed_flag || '') + '"/></label>';
         html += '<label title="Flag leve apres succes de l\'instruction">action_flag: <input type="text" style="width:120px;" data-instr-meta="action_flag:' + iInstr + '" value="' + editorEscapeAttr(instr.action_flag || '') + '"/></label>';
         html += '<label title="Flags a effacer apres succes (separes par virgule)">clear_flags: <input type="text" style="width:160px;" data-instr-meta="clear_flags:' + iInstr + '" value="' + editorEscapeAttr(Array.isArray(instr.clear_flags) ? instr.clear_flags.join(',') : '') + '"/></label>';
@@ -519,11 +793,13 @@ function editorRenderInstructionsList() {
     });
 
     // Clic sur l'en-tete d'une instruction : la marque comme courante. Ignore
-    // les clics sur input / button (qui ont leurs propres handlers).
+    // les clics sur input / button / summary et tout ce qui est dans un details
+    // (meta fields) ou dans la liste des tasks (qui ont leurs propres handlers).
     container.querySelectorAll('[data-instr-header]').forEach(function (el) {
         el.addEventListener('click', function (ev) {
-            if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'BUTTON') return;
-            // Ne pas reagir aux clics sur la liste des tasks en dessous
+            var tag = ev.target.tagName;
+            if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SUMMARY' || tag === 'LABEL') return;
+            if (ev.target.closest && ev.target.closest('details')) return;
             if (ev.target.closest && ev.target.closest('.editorTaskItem')) return;
             editorSetCurrentInstruction(parseInt(this.dataset.instrHeader, 10));
         });
@@ -654,11 +930,14 @@ function editorFieldsForTask(task) {
                        'GO_BACK_TO', 'PATH_BACK_TO', 'FACE_TO', 'FACE_BACK_TO'];
         if (primPos.indexOf(st) !== -1) fields = fields.concat(POS);
         if (st === 'LINE') fields.push({ key: 'dist', label: 'dist (mm, signe)', kind: 'number' });
-        if (st === 'ROTATE_DEG' || st === 'ROTATE_ABS_DEG') {
-            fields.push({ key: 'angle_deg', label: 'angle_deg', kind: 'number' });
+        if (st === 'ROTATE_DEG') {
+            fields.push({ key: 'angle_deg', label: 'angle_deg (° RELATIF, +=CCW / -=CW)', kind: 'number' });
+        }
+        if (st === 'ROTATE_ABS_DEG') {
+            fields.push({ key: 'angle_deg', label: 'angle_deg (° ABSOLU, heading cible)', kind: 'number' });
         }
         if (st === 'ORBITAL_TURN_DEG') {
-            fields.push({ key: 'angle_deg', label: 'angle_deg', kind: 'number' });
+            fields.push({ key: 'angle_deg', label: 'angle_deg (° RELATIF, arc pivot)', kind: 'number' });
             fields.push({ key: 'forward', label: 'forward (true/false)' });
             fields.push({ key: 'turn_right', label: 'turn_right (true/false)' });
         }
@@ -666,17 +945,15 @@ function editorFieldsForTask(task) {
         // Composites : dest + complement
         if (st.indexOf('_AND_') !== -1) {
             if (!fields.some(function (f) { return f.key === 'position_x'; })) fields = fields.concat(POS);
-            if (st.indexOf('_AND_ROTATE_ABS_DEG') !== -1) fields.push({ key: 'final_angle_deg', label: 'final_angle_deg', kind: 'number' });
-            if (st.indexOf('_AND_ROTATE_REL_DEG') !== -1) fields.push({ key: 'rotate_rel_deg', label: 'rotate_rel_deg', kind: 'number' });
+            if (st.indexOf('_AND_ROTATE_ABS_DEG') !== -1) fields.push({ key: 'final_angle_deg', label: 'final_angle_deg (° ABSOLU, heading final)', kind: 'number' });
+            if (st.indexOf('_AND_ROTATE_REL_DEG') !== -1) fields.push({ key: 'rotate_rel_deg', label: 'rotate_rel_deg (° RELATIF, delta post-arrivée)', kind: 'number' });
             if (st.indexOf('_AND_FACE_TO') !== -1 || st.indexOf('_AND_FACE_BACK_TO') !== -1) {
                 fields.push({ key: 'face_x', label: 'face_x (mm)', kind: 'number' });
                 fields.push({ key: 'face_y', label: 'face_y (mm)', kind: 'number' });
             }
         }
-        fields.push({ key: 'timeout', label: 'timeout (ms, -1 = aucun)', kind: 'number' });
     } else if (t === 'MANIPULATION') {
         fields.push({ key: 'action_id', label: 'action_id' });
-        fields.push({ key: 'timeout', label: 'timeout (ms)', kind: 'number' });
     } else if (t === 'ELEMENT') {
         fields.push({ key: 'subtype', label: 'subtype (ADD_ZONE | DELETE_ZONE)' });
         fields.push({ key: 'item_id', label: 'item_id' });
@@ -685,6 +962,9 @@ function editorFieldsForTask(task) {
     } else if (t === 'WAIT') {
         fields.push({ key: 'duration_ms', label: 'duration_ms', kind: 'number' });
     }
+    // Champs communs a toutes les tasks (spec §2.3 et §3.3)
+    fields.push({ key: 'timeout', label: 'timeout (ms, -1 = aucun)', kind: 'number' });
+    fields.push({ key: 'needed_flag', label: 'needed_flag (skip task si flag non actif)' });
     fields.push({ key: 'desc', label: 'desc (libelle affiche)' });
     return fields;
 }
@@ -697,11 +977,18 @@ function editorRenderEditPanel() {
     if (!body) return;
     var sel = window.editor.selectedTaskRef;
     if (!sel) {
-        body.innerHTML = '<em>(aucune task selectionnee)</em>';
+        body.innerHTML = '<em>(aucune selection)</em>';
         return;
     }
     var instr = window.editor.strategy.instructions[sel.iInstr];
     if (!instr) { body.innerHTML = '<em>Instruction introuvable</em>'; return; }
+    if (sel.iTask == null) {
+        // Instruction seule selectionnee (pas de task) : message adapte
+        body.innerHTML = '<em>Instruction #' + (instr.id || (sel.iInstr + 1))
+            + ' selectionnee (' + (instr.tasks ? instr.tasks.length : 0) + ' tache(s)). '
+            + 'Cliquer sur une tache pour l\'editer.</em>';
+        return;
+    }
     var task = instr.tasks[sel.iTask];
     if (!task) { body.innerHTML = '<em>Task introuvable</em>'; return; }
 
@@ -768,16 +1055,27 @@ function editorApplyFieldEdit(task, key, val) {
         editorMarkDirty();
         return;
     }
-    var numericKeys = ['position_x', 'position_y', 'dist', 'angle_deg',
-        'final_angle_deg', 'rotate_rel_deg', 'face_x', 'face_y',
-        'timeout', 'speed_percent', 'duration_ms'];
-    if (numericKeys.indexOf(key) !== -1) {
-        var n = parseFloat(val);
-        task[key] = isNaN(n) ? 0 : n;
+    // Arrondi specifique par type de champ :
+    // - positions (mm, 2 decimales) / angles (deg, 2 decimales) : editorRound2
+    // - distances / entiers (dist, timeout, duration_ms, speed_percent) : arrondi mm/entier
+    var decimal2Keys = ['position_x', 'position_y', 'face_x', 'face_y',
+        'angle_deg', 'final_angle_deg', 'rotate_rel_deg'];
+    var integerKeys = ['dist', 'timeout', 'duration_ms', 'speed_percent'];
+    if (decimal2Keys.indexOf(key) !== -1) {
+        if (val === '') { delete task[key]; }
+        else { var n1 = parseFloat(val); task[key] = isNaN(n1) ? 0 : editorRound2(n1); }
         editorMarkDirty();
         return;
     }
-    task[key] = val;
+    if (integerKeys.indexOf(key) !== -1) {
+        if (val === '') { delete task[key]; }
+        else { var n2 = parseFloat(val); task[key] = isNaN(n2) ? 0 : Math.round(n2); }
+        editorMarkDirty();
+        return;
+    }
+    // Champs string : supprime la cle si vide (evite "needed_flag": "" dans JSON)
+    if (val === '') { delete task[key]; }
+    else { task[key] = val; }
     editorMarkDirty();
 }
 
@@ -792,6 +1090,12 @@ function editorApplyFieldEdit(task, key, val) {
 function editorOnCanvasContextMenu(ev) {
     if (window.editor.mode !== 'edit') return;
     ev.preventDefault();
+    // Si on est en mode construction MANUAL_PATH, le clic-droit finalise
+    var active = window.editor.activeCommand;
+    if (active && active.cmd === 'MANUAL_PATH') {
+        editorFinalizeManualPath();
+        return;
+    }
     if (typeof stage === 'undefined' || !stage) return;
 
     var canvas = document.getElementById('canvas');
@@ -995,9 +1299,14 @@ function editorRenderLayer() {
                     } else {
                         heading = target.theta;
                     }
+                    // Type de rotation pour le code couleur :
+                    // ROTATE_DEG / _AND_ROTATE_REL_DEG = relatif (orange)
+                    // autres (ROTATE_ABS_DEG, FACE_*, composites ABS, alignement) = absolu (violet)
+                    var preRotKind = (st2 === 'ROTATE_DEG') ? 'rel' : 'abs';
+                    var postRotKind = (st2.indexOf('_AND_ROTATE_REL_DEG') !== -1) ? 'rel' : 'abs';
                     // Secteur de pre-rotation (rotation au depart)
                     if (Math.abs(heading - theta) > 0.01) {
-                        editorDrawRotationSector(layer, fromX, fromY, theta, heading, rotDashed);
+                        editorDrawRotationSector(layer, fromX, fromY, theta, heading, rotDashed, preRotKind);
                     }
                     // Trait / arc (si couleur disponible = tache avec deplacement visible)
                     if (color) {
@@ -1008,7 +1317,7 @@ function editorRenderLayer() {
                     if (st2.indexOf('_AND_') !== -1
                             && Math.abs(target.theta - heading) > 0.01) {
                         editorDrawRotationSector(layer, target.x, target.y,
-                            heading, target.theta, rotDashed);
+                            heading, target.theta, rotDashed, postRotKind);
                     }
                 } else if (isMovement && (st2 === 'ORBITAL_TURN_DEG' || st2 === 'MANUAL_PATH')) {
                     // Orbital et manual path dessinent leur arc/polyline en interne
@@ -1031,6 +1340,47 @@ function editorRenderLayer() {
             editorDrawInstrBox(layer, bb.x1, bb.y1, bb.x2, bb.y2, label, instrIdx);
         }
     });
+
+    // Memorise la pose simulee finale pour les composites 2-clics (1er clic capture from)
+    window.editor._lastPose = { x: x, y: y, theta: theta };
+
+    // Preview du premier clic d'un composite (en attente du 2e clic)
+    var cb = window.editor.composite2ndBuffer;
+    if (cb) {
+        var destDot = new createjs.Shape();
+        destDot.graphics
+            .beginFill('rgba(0,200,200,0.8)').beginStroke('#0a5').setStrokeStyle(2)
+            .drawCircle(toCanvasX(cb.dest.x), toCanvasY(cb.dest.y), 10);
+        layer.addChild(destDot);
+        var destLabel = new createjs.Text('dest', 'bold 14px Arial', '#064');
+        destLabel.x = toCanvasX(cb.dest.x) + 14;
+        destLabel.y = toCanvasY(cb.dest.y) - 8;
+        layer.addChild(destLabel);
+    }
+
+    // Preview du MANUAL_PATH en cours de construction (buffer de waypoints
+    // accumules par clic-gauche, finalise au clic-droit)
+    var buf = window.editor.manualPathBuffer;
+    if (buf && buf.length > 0) {
+        var mpShape = new createjs.Shape();
+        var gmp = mpShape.graphics.setStrokeStyle(3).setStrokeDash([6, 4])
+            .beginStroke('rgba(255,20,147,0.9)')
+            .moveTo(toCanvasX(x), toCanvasY(y));
+        buf.forEach(function (wp) {
+            gmp.lineTo(toCanvasX(wp[0]), toCanvasY(wp[1]));
+        });
+        layer.addChild(mpShape);
+        buf.forEach(function (wp, i) {
+            var dot = new createjs.Shape();
+            dot.graphics.beginFill('rgba(255,20,147,0.9)').beginStroke('#fff')
+                .setStrokeStyle(2).drawCircle(toCanvasX(wp[0]), toCanvasY(wp[1]), 10);
+            layer.addChild(dot);
+            var t = new createjs.Text(String(i + 1), 'bold 14px Arial', '#fff');
+            t.x = toCanvasX(wp[0]) - 4;
+            t.y = toCanvasY(wp[1]) - 8;
+            layer.addChild(t);
+        });
+    }
 
     stage.update();
 }
@@ -1135,7 +1485,7 @@ function editorDrawOrbitalArc(layer, fromX, fromY, fromTheta, task, color, dashe
  * (FACE_TO, FACE_BACK_TO, ROTATE_DEG, ROTATE_ABS_DEG). Rayon 60mm, fill
  * violet translucide + outline violet + fleche a l'extremite de l'arc.
  */
-function editorDrawRotationSector(layer, cx, cy, thetaStart, thetaEnd, dashed) {
+function editorDrawRotationSector(layer, cx, cy, thetaStart, thetaEnd, dashed, rotKind) {
     var delta = thetaEnd - thetaStart;
     while (delta > Math.PI) delta -= 2 * Math.PI;
     while (delta < -Math.PI) delta += 2 * Math.PI;
@@ -1143,8 +1493,16 @@ function editorDrawRotationSector(layer, cx, cy, thetaStart, thetaEnd, dashed) {
 
     var r = 60;
     var ccx = toCanvasX(cx), ccy = toCanvasY(cy);
-    var strokeCol = 'rgba(140,0,200,0.9)';
-    var fillCol = 'rgba(140,0,200,0.25)';
+    // 2 couleurs : 'rel' (orange/rouge) pour rotations relatives,
+    // 'abs' (violet) pour rotations absolues / alignements (FACE / heading)
+    var strokeCol, fillCol;
+    if (rotKind === 'rel') {
+        strokeCol = 'rgba(255,90,0,0.9)';
+        fillCol = 'rgba(255,90,0,0.25)';
+    } else {
+        strokeCol = 'rgba(140,0,200,0.9)';
+        fillCol = 'rgba(140,0,200,0.25)';
+    }
 
     var shape = new createjs.Shape();
     var g = shape.graphics.setStrokeStyle(2);

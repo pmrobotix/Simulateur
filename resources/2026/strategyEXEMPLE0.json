@@ -2,6 +2,10 @@
   {
     "id": 1,
     "desc": "Sortie zone depart",
+    "points": 0,
+    "priority": 100,
+    "estimatedDurationSec": 2,
+    "action_flag": "depart_libre",
     "tasks": [
       { "type": "ELEMENT", "subtype": "DELETE_ZONE", "item_id": "depart_bleu", "desc": "Liberer zone depart" },
       { "type": "SPEED", "subtype": "SET_SPEED", "speed_percent": 70, "desc": "Vitesse de croisiere" },
@@ -11,6 +15,11 @@
   {
     "id": 2,
     "desc": "Devant (sortie en S orbital)",
+    "points": 10,
+    "priority": 50,
+    "estimatedDurationSec": 5,
+    "needed_flag": "depart_libre",
+    "action_flag": "prise_devant_faite",
     "tasks": [
       { "type": "MOVEMENT", "subtype": "ORBITAL_TURN_DEG", "angle_deg": 50, "forward": true, "turn_right": true, "desc": "Orbital droite 50°" },
       { "type": "MOVEMENT", "subtype": "LINE", "dist": 200, "desc": "Avance entre les deux orbitaux" },
@@ -21,6 +30,11 @@
   {
     "id": 3,
     "desc": "Droite",
+    "points": 15,
+    "priority": 60,
+    "estimatedDurationSec": 6,
+    "needed_flag": "depart_libre",
+    "action_flag": "prise_droite_faite",
     "tasks": [
       { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 800, "position_y": 600, "desc": "GO droite" },
       { "type": "MOVEMENT", "subtype": "PATH_TO", "position_x": 1100, "position_y": 500, "desc": "PATH droite" },
@@ -31,6 +45,11 @@
   {
     "id": 4,
     "desc": "Haut droite",
+    "points": 20,
+    "priority": 40,
+    "estimatedDurationSec": 8,
+    "needed_flag": "depart_libre",
+    "action_flag": "prise_haut_droit_faite",
     "tasks": [
       { "type": "MOVEMENT", "subtype": "PATH_TO", "position_x": 1300, "position_y": 1200, "desc": "PATH vers haut droite" },
       { "type": "MOVEMENT", "subtype": "GO_TO_AND_FACE_TO", "position_x": 1400, "position_y": 1500, "face_x": 1400, "face_y": 1800, "desc": "Approche + face haut" },
@@ -41,6 +60,11 @@
   {
     "id": 5,
     "desc": "Haut gauche",
+    "points": 20,
+    "priority": 40,
+    "estimatedDurationSec": 8,
+    "needed_flag": "depart_libre",
+    "action_flag": "prise_haut_gauche_faite",
     "tasks": [
       { "type": "MOVEMENT", "subtype": "PATH_TO", "position_x": 700, "position_y": 1600, "desc": "PATH vers haut gauche" },
       { "type": "MOVEMENT", "subtype": "ORBITAL_TURN_DEG", "angle_deg": 90, "forward": true, "turn_right": false, "desc": "Orbital pour approche" },
@@ -51,6 +75,11 @@
   {
     "id": 6,
     "desc": "Gauche",
+    "points": 10,
+    "priority": 30,
+    "estimatedDurationSec": 5,
+    "needed_flag": "depart_libre",
+    "action_flag": "prise_gauche_faite",
     "tasks": [
       { "type": "MOVEMENT", "subtype": "PATH_TO", "position_x": 250, "position_y": 1300, "desc": "PATH gauche haut" },
       { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 200, "position_y": 900, "desc": "GO gauche milieu" },
@@ -61,6 +90,11 @@
   {
     "id": 7,
     "desc": "Retour case depart",
+    "points": 20,
+    "priority": 5,
+    "estimatedDurationSec": 4,
+    "needed_flag": "depart_libre",
+    "clear_flags": ["depart_libre"],
     "tasks": [
       { "type": "MOVEMENT", "subtype": "PATH_TO", "position_x": 300, "position_y": 300, "desc": "PATH retour init" },
       { "type": "MOVEMENT", "subtype": "ROTATE_ABS_DEG", "angle_deg": 90, "desc": "Orientation init +Y" },

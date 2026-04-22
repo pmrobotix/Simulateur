@@ -69,6 +69,7 @@ Dans `resources/2026/` :
 | `📂 LOAD init` | Charge un fichier `initXxx.json` (pose initiale) |
 | `📦 LOAD PMX0 / INIT0` | Charge les fichiers de préconfig PMX0 du disque |
 | `📦 LOAD PMX1 / INIT1` | Idem pour PMX1 (préconfig) |
+| `📦 LOAD EXEMPLE0` | Démo complète couvrant tous les subtypes |
 
 Toutes ces sources écrivent dans le même slot (`window.editor.strategy`).
 Les boutons `BLEU` / `JAUNE` jouent ce slot quel que soit son origine, y
@@ -84,6 +85,9 @@ compris les modifications apportées dans l'éditeur.
   naturellement si Pause)
 - `🖌 Dessiner strat` : dessine l'aperçu complet des trajectoires d'un seul
   coup (sans animation), live update si on édite
+- `📦 Groupe` : active l'affichage d'encadrés colorés autour des tâches de
+  chaque instruction (avec son nom en label). Utile pour voir d'un coup
+  d'œil quelles tâches appartiennent à quel groupe
 
 ## Éditeur de stratégie
 
@@ -119,6 +123,9 @@ Le panneau éditeur est découpé en 3 zones (split scroll) :
    réel
 7. **Insertion précise** : quand une tâche est sélectionnée, les suivantes
    (clic canvas, `+ LINE`…) s'insèrent JUSTE APRÈS (pas à la fin)
+8. **Cliquer l'en-tête d'une instruction** (zone verte) la sélectionne
+   comme courante. Pratique pour ajouter des tâches à une instruction vide
+   ou existante.
 
 ### Sauvegarde
 
@@ -134,21 +141,56 @@ Le panneau éditeur est découpé en 3 zones (split scroll) :
 Le point `●` rouge devant le nom de la strat signale des modifications non
 exportées ; il disparaît après `Exporter strat JSON` ou un nouveau LOAD.
 
+### Champs optionnels d'instruction (Meta)
+
+Chaque instruction peut déplier une section `▶ Meta` qui expose les champs
+optionnels du format spec (§2.2) :
+
+- `points` (int) — points attendus si l'instruction réussit
+- `priority` (int/float) — priorité (plus élevé = choisi en premier)
+- `EDSec` = `estimatedDurationSec` (float) — durée estimée en secondes
+- `needed_flag` (string) — l'instruction est skippée si ce flag n'est pas actif
+- `action_flag` (string) — ce flag est levé après succès
+- `clear_flags` (string, valeurs séparées par virgule) — flags à effacer après succès
+
+Les champs laissés vides ne sont pas inclus dans le JSON exporté.
+
+### Champs optionnels de task
+
+Chaque tâche expose aussi :
+
+- `timeout` (int, ms, -1 = aucun)
+- `needed_flag` (string) — la task est skippée si ce flag n'est pas actif
+  (ET logique avec le `needed_flag` de l'instruction si les deux sont définis)
+- `desc` (string) — libellé affiché dans le panneau d'exécution
+
 ### Convention de couleurs (traits)
 
 Les traits dessinés suivent la spec
 [STRATEGY_JSON_FORMAT.md §2.4](../robot/md/STRATEGY_JSON_FORMAT.md) :
 
-- `LINE ≥ 0` : bleu
-- `LINE < 0` : orange
-- `GO_TO` / `GO_BACK_TO` : cyan (pointillé pour BACK)
-- `MOVE_FORWARD_TO` : bleu clair
-- `MOVE_BACKWARD_TO` : orange clair
-- `PATH_TO` / `PATH_BACK_TO` / `MANUAL_PATH` : rose
-- `FACE_TO` / `ROTATE_*` : pas de trait (rotation sur place)
+| Couleur | Subtypes |
+|---|---|
+| bleu dodger | `LINE ≥ 0` |
+| orange | `LINE < 0` |
+| cyan | `GO_TO` / `GO_BACK_TO` |
+| bleu clair | `MOVE_FORWARD_TO` |
+| orange clair | `MOVE_BACKWARD_TO` |
+| rose | `PATH_TO` / `PATH_BACK_TO` / `MANUAL_PATH` + composites `PATH_TO_AND_*` |
+| violet (arc) | `ORBITAL_TURN_DEG` (arc autour de la roue pivot) |
+| violet (secteur plein) | `FACE_*` / `ROTATE_*` (rotation sur place) + pré/post-rotation des autres mouvements |
 
-Pastilles pour les tasks non-géométriques : `M` (manipulation), `W` (wait),
-`S` (speed), `E` (element).
+**Style du trait** :
+- Trait plein → mouvement vers l'avant
+- Trait pointillé → mouvement vers l'arrière (`GO_BACK_TO`, `PATH_BACK_TO`,
+  `MOVE_BACKWARD_TO`, `LINE < 0`, `FACE_BACK_TO`, `ORBITAL forward:false`)
+
+Les **secteurs plein violet** (arc de disque) indiquent toutes les rotations
+du robot (pré-rotation avant chaque mouvement, rotation pure pour
+`FACE_*`/`ROTATE_*`, rotation finale des composites `_AND_*`).
+
+Pastilles rondes jaunes avec lettre pour les tasks non-géométriques :
+`M` = MANIPULATION, `W` = WAIT, `S` = SPEED, `E` = ELEMENT (ADD/DELETE_ZONE).
 
 ## Format des fichiers de stratégie
 
@@ -156,8 +198,22 @@ Cf. [robot/md/STRATEGY_JSON_FORMAT.md](../robot/md/STRATEGY_JSON_FORMAT.md)
 pour la référence complète (instructions, tasks, subtypes, flags).
 
 Le simulateur implémente l'intégralité des subtypes MOVEMENT (13 primitives
-+ 12 composites) ainsi que MANIPULATION (stub), ELEMENT (ADD/DELETE_ZONE),
-SPEED, WAIT.
++ 12 composites) ainsi que MANIPULATION (stub — juste logué), ELEMENT
+(ADD/DELETE_ZONE), SPEED, WAIT.
+
+Le système de **flags** (`needed_flag` / `action_flag` / `clear_flags`) est
+accepté dans les fichiers JSON mais PAS encore interprété côté simulateur
+(il sera géré par le runner C++ — cf. [STRATEGY_JSON_ROADMAP.md Phase 5](../robot/md/STRATEGY_JSON_ROADMAP.md)).
+L'éditeur permet de les saisir dès aujourd'hui pour construire le JSON
+complet, prêt pour le runner.
+
+### EXEMPLE0 — démo visuelle
+
+`LOAD EXEMPLE0` charge une démo organisée en 7 groupes géographiques
+(Sortie / Devant / Droite / Haut droite / Haut gauche / Gauche / Retour).
+Utile pour tester le bouton `📦 Groupe` qui dessine un encadré coloré
+autour de chaque groupe. Le groupe "Devant" contient une S-curve (2 orbitaux
+successifs en sens opposé) pour démonstration.
 
 ## Mode Live (WebSocket)
 
