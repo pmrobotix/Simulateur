@@ -1,0 +1,24 @@
+[
+  {
+    "id": 1, "desc": "i1 OK, leve a_done", "priority": 100,
+    "action_flag": "a_done",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 1500, "position_y": 400 },
+      { "type": "MANIPULATION", "action_id": "trace_i1" }
+    ]
+  },
+  {
+    "id": 2, "desc": "i2 bloquee par adv (GO_TO echoue)", "priority": 50,
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 2500, "position_y": 1400 },
+      { "type": "MANIPULATION", "action_id": "trace_i2" }
+    ]
+  },
+  {
+    "id": 3, "desc": "i3 retour (non atteinte en Phase 1 : abort)", "priority": 10,
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 300, "position_y": 1800 },
+      { "type": "MANIPULATION", "action_id": "trace_i3" }
+    ]
+  }
+]

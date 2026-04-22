@@ -1,0 +1,11 @@
+[
+  {
+    "id": 1, "desc": "1 instr, task 2 skippee par needed_flag", "priority": 10,
+    "tasks": [
+      { "type": "MANIPULATION", "action_id": "trace_t1" },
+      { "type": "MANIPULATION", "action_id": "trace_t2", "needed_flag": "NEVER" },
+      { "type": "MANIPULATION", "action_id": "trace_t3" },
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 1500, "position_y": 1500 }
+    ]
+  }
+]

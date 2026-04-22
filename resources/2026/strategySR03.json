@@ -1,0 +1,16 @@
+[
+  {
+    "id": 1, "desc": "i1 priority=-1 (desactivee)", "priority": -1,
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 1500, "position_y": 1500 },
+      { "type": "MANIPULATION", "action_id": "trace_i1" }
+    ]
+  },
+  {
+    "id": 2, "desc": "i2 p=10", "priority": 10,
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 1000, "position_y": 1000 },
+      { "type": "MANIPULATION", "action_id": "trace_i2" }
+    ]
+  }
+]

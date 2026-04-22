@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1, "desc": "i1 leve flag A", "priority": 100,
+    "action_flag": "A",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 800, "position_y": 800 },
+      { "type": "MANIPULATION", "action_id": "trace_i1" }
+    ]
+  },
+  {
+    "id": 2, "desc": "i2 clear_flags=[A]", "priority": 50,
+    "clear_flags": ["A"],
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 1500, "position_y": 800 },
+      { "type": "MANIPULATION", "action_id": "trace_i2" }
+    ]
+  },
+  {
+    "id": 3, "desc": "i3 needed_flag=A (skip car A efface)", "priority": 10,
+    "needed_flag": "A",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 2000, "position_y": 800 },
+      { "type": "MANIPULATION", "action_id": "trace_i3" }
+    ]
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "id": 1, "desc": "i1 p=100", "priority": 100,
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 1500, "position_y": 400 },
+      { "type": "MANIPULATION", "action_id": "trace_i1" }
+    ]
+  },
+  {
+    "id": 2, "desc": "i2 p=10", "priority": 10,
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 2000, "position_y": 1400 },
+      { "type": "MANIPULATION", "action_id": "trace_i2" }
+    ]
+  },
+  {
+    "id": 3, "desc": "i3 p=50", "priority": 50,
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 2500, "position_y": 600 },
+      { "type": "MANIPULATION", "action_id": "trace_i3" }
+    ]
+  }
+]

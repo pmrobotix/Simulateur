@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1, "desc": "i1 leve flag A", "priority": 100,
+    "action_flag": "A",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 1000, "position_y": 1000 },
+      { "type": "MANIPULATION", "action_id": "trace_i1" }
+    ]
+  },
+  {
+    "id": 2, "desc": "i2 needed_flag=A (OK)", "priority": 50,
+    "needed_flag": "A",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 1500, "position_y": 500 },
+      { "type": "MANIPULATION", "action_id": "trace_i2" }
+    ]
+  },
+  {
+    "id": 3, "desc": "i3 needed_flag=NEVER (skip)", "priority": 10,
+    "needed_flag": "NEVER",
+    "tasks": [
+      { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 500, "position_y": 1500 },
+      { "type": "MANIPULATION", "action_id": "trace_i3" }
+    ]
+  }
+]
