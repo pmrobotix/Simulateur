@@ -213,6 +213,22 @@ Le panneau éditeur est découpé en 3 zones (split scroll) :
   supprimer 🗑)
 - **Bas fixe** : formulaire d'édition de la tâche sélectionnée
 
+### Ligne SETPOS (avant tirette)
+
+La première ligne (pinned, fond gris pointillé) **🔒 SETPOS (avant
+tirette)** contient les tasks jouées **avant** la tirette / chrono start
+(simule la séquence `setPos()` du robot C++ : avance d'X mm, calage,
+etc.).
+
+- Sélectionner la ligne ou une de ses tasks pour que la palette y ajoute
+  des tasks (LINE, ROT, FACE_TO…)
+- Tasks éditables/réordonnables/supprimables comme dans une instruction
+  match
+- Persistées dans `init<Name>.json` sous la clé `setpos_tasks` (rétro-
+  compat : si absente, défaut `[]`)
+- Au playback BLEU/JAUNE, jouées **avant** la première instruction
+  match, en couleur grise distincte
+
 ### Workflow d'édition
 
 1. Cliquer `✨ CREATE` → panneau éditeur s'ouvre avec une strat vide, mode

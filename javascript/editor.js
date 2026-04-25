@@ -24,7 +24,11 @@ window.editor = {
         instructions: []          // [{ id, desc, tasks: [...] }, ...] — état partagé édition/lecture
     },
     initialPose: { x: 300, y: 300, theta: Math.PI / 2 },
-    selectedTaskRef: null,        // { iInstr, iTask } ; iTask peut etre null pour "instruction seule selectionnee"
+    // Tasks jouees AVANT la tirette (pre-match), persistees dans init<Name>.json
+    // sous la cle `setpos_tasks`. Meme format que les tasks d'une instruction.
+    // Adressees via iInstr === -1 dans la selection.
+    setposTasks: [],
+    selectedTaskRef: null,        // { iInstr, iTask } ; iInstr === -1 = SETPOS ; iTask peut etre null pour "instruction seule selectionnee"
     _layer: null,                 // createjs.Container pour le rendu edition
     // Nom du fichier utilisateur charge (juste pour l'affichage ; le contenu
     // est dans `strategy.instructions` ci-dessus)
@@ -62,6 +66,9 @@ function editorInit(init) {
             y: init.y,
             theta: init.theta
         };
+        if (Array.isArray(init.setpos_tasks)) {
+            window.editor.setposTasks = init.setpos_tasks;
+        }
         editorRefreshInitialPoseInputs();
     }
     // Layer createjs dediee au rendu edition (au-dessus du robot)
@@ -569,6 +576,32 @@ function editorFinalizeManualPath() {
 // ============================================================================
 
 /**
+ * Retourne le tableau de tasks pour iInstr (-1 = SETPOS, sinon instruction[iInstr]).
+ */
+function editorTasksAt(iInstr) {
+    if (iInstr === -1) return window.editor.setposTasks;
+    var instr = window.editor.strategy.instructions[iInstr];
+    return (instr && Array.isArray(instr.tasks)) ? instr.tasks : null;
+}
+
+/**
+ * Construit la liste d'instructions a envoyer au playback : prepend SETPOS
+ * (instruction virtuelle id=0) si setposTasks non vide. Deep-copy.
+ */
+function editorBuildPlaybackInstructions() {
+    var arr = JSON.parse(JSON.stringify(window.editor.strategy.instructions || []));
+    var setpos = window.editor.setposTasks;
+    if (Array.isArray(setpos) && setpos.length > 0) {
+        arr.unshift({
+            id: 0,
+            desc: 'SETPOS (avant tirette)',
+            tasks: JSON.parse(JSON.stringify(setpos))
+        });
+    }
+    return arr;
+}
+
+/**
  * Cree une nouvelle instruction vide et la selectionne (iTask: null).
  */
 function editorAddInstruction() {
@@ -593,16 +626,16 @@ function editorAppendTask(task) {
     var s = window.editor.strategy;
     var sel = window.editor.selectedTaskRef;
     if (sel && sel.iInstr != null) {
-        var instr = s.instructions[sel.iInstr];
-        if (instr && Array.isArray(instr.tasks)) {
+        var tasks = editorTasksAt(sel.iInstr);
+        if (tasks) {
             if (sel.iTask != null) {
                 // Task selectionnee : insertion APRES
-                instr.tasks.splice(sel.iTask + 1, 0, task);
+                tasks.splice(sel.iTask + 1, 0, task);
                 window.editor.selectedTaskRef = { iInstr: sel.iInstr, iTask: sel.iTask + 1 };
             } else {
-                // Instruction seule selectionnee : append a la fin de cette instruction
-                instr.tasks.push(task);
-                window.editor.selectedTaskRef = { iInstr: sel.iInstr, iTask: instr.tasks.length - 1 };
+                // Instruction seule selectionnee : append a la fin
+                tasks.push(task);
+                window.editor.selectedTaskRef = { iInstr: sel.iInstr, iTask: tasks.length - 1 };
             }
             editorMarkDirty();
             editorRenderInstructionsList();
@@ -734,14 +767,39 @@ function editorRenderInstructionsList() {
     var container = document.getElementById('editorInstructionsList');
     if (!container) return;
     var s = window.editor.strategy;
-    if (s.instructions.length === 0) {
-        container.innerHTML = '<em>(aucune instruction)</em>';
-        editorRenderEditPanel();
-        editorRenderLayer();
-        return;
-    }
     var sel = window.editor.selectedTaskRef;
     var html = '';
+
+    // Ligne SETPOS pinned (iInstr = -1) : tasks executees AVANT la tirette,
+    // persistees dans init<Name>.json. Toujours visible, non supprimable, non reordonnable.
+    {
+        var setposTasks = window.editor.setposTasks || [];
+        var isSelSetpos = sel && sel.iInstr === -1;
+        var spBorder = isSelSetpos ? '#4caf50' : '#888';
+        var spBW = isSelSetpos ? '3px' : '1px';
+        var spBg = isSelSetpos ? '#f1fff1' : '#f0f0f0';
+        html += '<div class="editorInstruction" style="margin-top:2px; border:' + spBW + ' dashed ' + spBorder + '; padding:4px; background:' + spBg + ';" data-instr-header="-1">';
+        html += '<div style="font-weight:bold; cursor:pointer; color:#555;" title="SETPOS : tasks jouees avant tirette (init JSON)">';
+        html += '&#128274; SETPOS (avant tirette) <span style="font-weight:normal; font-size:13px;">- ' + setposTasks.length + ' task(s)</span>';
+        html += '</div>';
+        html += '<ul style="margin:2px 0 0 20px;">';
+        setposTasks.forEach(function (task, iTask) {
+            var isSel = sel && sel.iInstr === -1 && sel.iTask === iTask;
+            html += '<li class="editorTaskItem' + (isSel ? ' selected' : '') + '"';
+            html += ' data-sel-instr="-1" data-sel-task="' + iTask + '">';
+            html += '<span>' + editorEscapeHtml(editorTaskOneLine(task)) + '</span>';
+            html += ' <button type="button" style="font-size:16px;" data-move-task-up="-1:' + iTask + '" title="Monter">&#9650;</button>';
+            html += ' <button type="button" style="font-size:16px;" data-move-task-down="-1:' + iTask + '" title="Descendre">&#9660;</button>';
+            html += ' <button type="button" style="font-size:16px;" data-delete-task="-1:' + iTask + '" title="Supprimer">&#128465;</button>';
+            html += '</li>';
+        });
+        html += '</ul>';
+        html += '</div>';
+    }
+
+    if (s.instructions.length === 0) {
+        html += '<em>(aucune instruction match)</em>';
+    }
     s.instructions.forEach(function (instr, iInstr) {
         var isSelInstr = sel && sel.iInstr === iInstr;
         var borderColor = isSelInstr ? '#4caf50' : '#999';
@@ -980,22 +1038,22 @@ function editorRenderEditPanel() {
         body.innerHTML = '<em>(aucune selection)</em>';
         return;
     }
-    var instr = window.editor.strategy.instructions[sel.iInstr];
-    if (!instr) { body.innerHTML = '<em>Instruction introuvable</em>'; return; }
+    var isSetpos = (sel.iInstr === -1);
+    var tasksArr = editorTasksAt(sel.iInstr);
+    if (!tasksArr) { body.innerHTML = '<em>Instruction introuvable</em>'; return; }
+    var instrLabel = isSetpos ? 'SETPOS' : ('#' + (window.editor.strategy.instructions[sel.iInstr].id || (sel.iInstr + 1)));
     if (sel.iTask == null) {
-        // Instruction seule selectionnee (pas de task) : message adapte
-        body.innerHTML = '<em>Instruction #' + (instr.id || (sel.iInstr + 1))
-            + ' selectionnee (' + (instr.tasks ? instr.tasks.length : 0) + ' tache(s)). '
+        body.innerHTML = '<em>' + instrLabel + ' selectionnee (' + tasksArr.length + ' tache(s)). '
             + 'Cliquer sur une tache pour l\'editer.</em>';
         return;
     }
-    var task = instr.tasks[sel.iTask];
+    var task = tasksArr[sel.iTask];
     if (!task) { body.innerHTML = '<em>Task introuvable</em>'; return; }
 
     var html = '';
     html += '<div>Type : <strong>' + editorEscapeHtml(task.type || '') + '</strong>';
     if (task.subtype) html += ' / <strong>' + editorEscapeHtml(task.subtype) + '</strong>';
-    html += ' &nbsp; (instr #' + (instr.id || (sel.iInstr + 1));
+    html += ' &nbsp; (' + instrLabel;
     html += ', task ' + (sel.iTask + 1) + ')</div>';
 
     editorFieldsForTask(task).forEach(function (f) {
@@ -1164,9 +1222,9 @@ function editorDeleteSelectedTask() {
  * Supprime la task (iInstr, iTask) et deselectionne si c'etait celle-la.
  */
 function editorDeleteTask(iInstr, iTask) {
-    var instr = window.editor.strategy.instructions[iInstr];
-    if (!instr || !Array.isArray(instr.tasks)) return;
-    instr.tasks.splice(iTask, 1);
+    var tasks = editorTasksAt(iInstr);
+    if (!tasks) return;
+    tasks.splice(iTask, 1);
     var sel = window.editor.selectedTaskRef;
     if (sel && sel.iInstr === iInstr && sel.iTask === iTask) {
         window.editor.selectedTaskRef = null;
@@ -1181,13 +1239,13 @@ function editorDeleteTask(iInstr, iTask) {
  * Deplace la task dans la meme instruction (dir = -1 ou +1).
  */
 function editorMoveTask(iInstr, iTask, dir) {
-    var instr = window.editor.strategy.instructions[iInstr];
-    if (!instr || !Array.isArray(instr.tasks)) return;
+    var tasks = editorTasksAt(iInstr);
+    if (!tasks) return;
     var j = iTask + dir;
-    if (j < 0 || j >= instr.tasks.length) return;
-    var tmp = instr.tasks[iTask];
-    instr.tasks[iTask] = instr.tasks[j];
-    instr.tasks[j] = tmp;
+    if (j < 0 || j >= tasks.length) return;
+    var tmp = tasks[iTask];
+    tasks[iTask] = tasks[j];
+    tasks[j] = tmp;
     var sel = window.editor.selectedTaskRef;
     if (sel && sel.iInstr === iInstr && sel.iTask === iTask) {
         window.editor.selectedTaskRef = { iInstr: iInstr, iTask: j };
@@ -1268,10 +1326,16 @@ function editorRenderLayer() {
         .drawCircle(toCanvasX(p0x), toCanvasY(p0y), 12);
     layer.addChild(startDot);
 
-    // Parcours des instructions et simulation de la pose (miroirisee si jaune)
+    // Parcours des instructions et simulation de la pose (miroirisee si jaune).
+    // SETPOS prepende comme instruction virtuelle (#0) si non vide.
     var x = p0x, y = p0y, theta = p0theta;
     void p0theta;
-    window.editor.strategy.instructions.forEach(function (instr, instrIdx) {
+    var renderList = [];
+    if (Array.isArray(window.editor.setposTasks) && window.editor.setposTasks.length > 0) {
+        renderList.push({ id: 0, desc: 'SETPOS', tasks: window.editor.setposTasks, _isSetpos: true });
+    }
+    Array.prototype.push.apply(renderList, window.editor.strategy.instructions);
+    renderList.forEach(function (instr, instrIdx) {
         if (!Array.isArray(instr.tasks)) return;
         // Tracking bounding box de l'instruction si l'option encadres est on
         var bb = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity, has: false };
@@ -1287,6 +1351,8 @@ function editorRenderLayer() {
                 var color = (typeof strokeColorForTask === 'function')
                     ? strokeColorForTask(usedTask)
                     : null;
+                // Couleur distincte pour SETPOS (gris semi-transparent)
+                if (instr._isSetpos && color) color = 'rgba(120,120,120,0.7)';
                 var isMovement = usedTask.type === 'MOVEMENT';
                 var st2 = usedTask.subtype || '';
                 var rotDashed = (typeof isBackwardTask === 'function') && isBackwardTask(usedTask);
@@ -1630,13 +1696,14 @@ function editorExportStrategy() {
 
 function editorExportInit() {
     var p = window.editor.initialPose;
-    // Format Esial : { x, y, theta (rad), regX, regY }
+    // Format Esial enrichi : { x, y, theta (rad), regX, regY, setpos_tasks[] }
     var obj = {
         x: p.x,
         y: p.y,
         theta: p.theta,
         regX: 0,
-        regY: 0
+        regY: 0,
+        setpos_tasks: Array.isArray(window.editor.setposTasks) ? window.editor.setposTasks : []
     };
     var name = window.editor.strategy.name || 'PMX0';
     editorDownloadJson('init' + name + '.json', JSON.stringify(obj, null, 2));
@@ -1685,7 +1752,7 @@ function editorOnLoadStratFile(ev) {
         if (nameInput) nameInput.value = window.editor.strategy.name;
         // Prepare playback en bleu (Suivant/Auto se debloquent)
         if (typeof loadSimulatorStrat === 'function') {
-            loadSimulatorStrat(JSON.parse(JSON.stringify(data)));
+            loadSimulatorStrat(editorBuildPlaybackInstructions());
         }
         editorUpdateLoadedSlotUi();
         editorRenderInstructionsList();
@@ -1711,8 +1778,11 @@ function editorOnLoadInitFile(ev) {
             return;
         }
         window.editor.initialPose = { x: data.x, y: data.y, theta: data.theta };
+        // Champ optionnel : tasks jouees AVANT la tirette (defaut [] pour retro-compat)
+        window.editor.setposTasks = Array.isArray(data.setpos_tasks) ? data.setpos_tasks : [];
         editorRefreshInitialPoseInputs();
         editorUpdateRobotFromInitialPose();
+        editorRenderInstructionsList();
         editorRenderLayer();
     };
     reader.readAsText(file);
@@ -1809,6 +1879,7 @@ function editorLoadPreconfig(suffix, cb) {
                 var data = JSON.parse(script2);
                 if (typeof data.x === 'number') {
                     window.editor.initialPose = { x: data.x, y: data.y, theta: data.theta };
+                    window.editor.setposTasks = Array.isArray(data.setpos_tasks) ? data.setpos_tasks : [];
                     editorRefreshInitialPoseInputs();
                     editorUpdateRobotFromInitialPose();
                 }
@@ -1817,7 +1888,7 @@ function editorLoadPreconfig(suffix, cb) {
             if (Array.isArray(window.editor.strategy.instructions)
                     && window.editor.strategy.instructions.length > 0
                     && typeof loadSimulatorStrat === 'function') {
-                loadSimulatorStrat(JSON.parse(JSON.stringify(window.editor.strategy.instructions)));
+                loadSimulatorStrat(editorBuildPlaybackInstructions());
             }
             editorRenderInstructionsList();
             editorUpdateLoadedSlotUi();

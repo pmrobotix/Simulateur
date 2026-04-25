@@ -370,7 +370,10 @@ par le runner C++ pour faire `Asserv::setPosAndColor()`.
   "y": 300,
   "theta": 1.5707963267948966,
   "regX": 0,
-  "regY": 0
+  "regY": 0,
+  "setpos_tasks": [
+    { "type": "MOVEMENT", "subtype": "LINE", "dist": 80, "desc": "avance pre-tirette" }
+  ]
 }
 ```
 
@@ -383,9 +386,14 @@ par le runner C++ pour faire `Asserv::setPosAndColor()`.
 | `theta` | float | **oui** | Orientation en **radians** (0 = +X, π/2 = +Y) — cohérent avec Esial et le C++ |
 | `regX` | int | optionnel | Centre de rotation dans le PNG (pour affichage simu) |
 | `regY` | int | optionnel | idem |
+| `setpos_tasks` | array | optionnel | Tasks jouées AVANT la tirette (séquence `setPos` du robot, ex: avance d'X mm pour caler). Format identique aux tasks de `instructions[].tasks`. Défaut `[]`. |
 
 > Note : `theta` est en **radians** ici (pas `angle_deg`), car `initBig.json`
 > est hérité du format Esial original et utilisé par le simulateur.
+
+> `setpos_tasks` : jouées par le simu avant la première instruction match, en
+> couleur grise distincte. Côté C++, ces tasks remplacent à terme le hardcode
+> de `O_State_NewInit::setPos()`.
 
 ---
 

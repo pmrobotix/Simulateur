@@ -984,6 +984,7 @@ function loadDefaultStrat(color) {
             var init = JSON.parse(script2);
             if (window.editor) {
                 window.editor.initialPose = { x: init.x, y: init.y, theta: init.theta };
+                window.editor.setposTasks = Array.isArray(init.setpos_tasks) ? init.setpos_tasks : [];
                 if (typeof editorRefreshInitialPoseInputs === 'function') editorRefreshInitialPoseInputs();
             }
             var x = mirror ? mirrorX(init.x) : init.x;
@@ -997,7 +998,9 @@ function loadDefaultStrat(color) {
             }
             if (typeof editorRenderInstructionsList === 'function') editorRenderInstructionsList();
 
-            var strategy = JSON.parse(JSON.stringify(raw));
+            var strategy = (typeof editorBuildPlaybackInstructions === 'function')
+                ? editorBuildPlaybackInstructions()
+                : JSON.parse(JSON.stringify(raw));
             if (mirror) strategy = mirrorStrategy(strategy);
             loadSimulatorStrat(strategy);
         });
@@ -1033,7 +1036,9 @@ function loadLoadedStrat(color) {
     // correctement depuis cette pose.
     playbackPose = { x: x, y: y, theta: theta };
 
-    var strategy = JSON.parse(JSON.stringify(window.editor.strategy.instructions));
+    var strategy = (typeof editorBuildPlaybackInstructions === 'function')
+        ? editorBuildPlaybackInstructions()
+        : JSON.parse(JSON.stringify(window.editor.strategy.instructions));
     if (mirror) strategy = mirrorStrategy(strategy);
     loadSimulatorStrat(strategy);
 }
