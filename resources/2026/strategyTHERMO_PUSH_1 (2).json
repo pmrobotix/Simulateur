@@ -1,0 +1,270 @@
+[
+  {
+    "id": 1,
+    "desc": "Sortie de la zone",
+    "tasks": [
+      {
+        "type": "MOVEMENT",
+        "subtype": "GO_TO",
+        "position_x": 450,
+        "position_y": 800,
+        "desc": "Sorite"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "desc": "Thermometre",
+    "tasks": [
+      {
+        "type": "MOVEMENT",
+        "subtype": "PATH_TO",
+        "position_x": 450,
+        "position_y": 1730,
+        "desc": "VERS THERMO"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "ORBITAL_TURN_DEG",
+        "angle_deg": 90,
+        "forward": true,
+        "turn_right": false,
+        "desc": "ORBITAL CONTRE BORD",
+        "timeout": 1000
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "LINE",
+        "dist": 215,
+        "desc": "AVANCE VERS CURSEUR",
+        "timeout": 2000
+      },
+      {
+        "type": "MANIPULATION",
+        "timeout": 2000,
+        "desc": "SORTIE DOIGT",
+        "action_id": "out_finger"
+      },
+      {
+        "type": "WAIT",
+        "duration_ms": 1000,
+        "desc": "WAIT 1000ms"
+      },
+      {
+        "type": "SPEED",
+        "subtype": "SET_SPEED",
+        "desc": "RALENTIR",
+        "speed_percent": 30
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "LINE",
+        "dist": -600,
+        "desc": "DEPLACEMENT CURSEUR"
+      },
+      {
+        "type": "SPEED",
+        "subtype": "SET_SPEED",
+        "speed_percent": 20,
+        "desc": "SPEED 50%"
+      },
+      {
+        "type": "MANIPULATION",
+        "action_id": "in_finger",
+        "timeout": 2000,
+        "desc": "ENTREE DOIGT"
+      },
+      {
+        "type": "SPEED",
+        "subtype": "SET_SPEED",
+        "speed_percent": 100,
+        "desc": "VITESSE NORMALE"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "ORBITAL_TURN_DEG",
+        "angle_deg": -40,
+        "forward": true,
+        "turn_right": false,
+        "desc": "SORTIE BORDURE"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "desc": "Pousser P3_GM5",
+    "tasks": [
+      {
+        "type": "MOVEMENT",
+        "subtype": "PATH_BACK_TO",
+        "position_x": 850,
+        "position_y": 1825,
+        "desc": "VERS P3"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "FACE_BACK_TO",
+        "position_x": 1100,
+        "position_y": 1825,
+        "desc": "FACE_P3"
+      },
+      {
+        "type": "SPEED",
+        "subtype": "SET_SPEED",
+        "speed_percent": 30,
+        "desc": "RALENTIR"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "LINE",
+        "dist": -410,
+        "desc": "POUSSE P3"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "LINE",
+        "dist": 200,
+        "desc": "LIBERE P3"
+      },
+      {
+        "type": "SPEED",
+        "subtype": "SET_SPEED",
+        "speed_percent": 80,
+        "desc": "VITESSE NORMALE"
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "desc": "Pousser P4_GM6",
+    "tasks": [
+      {
+        "type": "MOVEMENT",
+        "subtype": "PATH_TO",
+        "position_x": 800,
+        "position_y": 1200,
+        "desc": "VERS GM3"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "ROTATE_ABS_DEG",
+        "angle_deg": 180,
+        "desc": "DOS A P4"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "GO_BACK_TO",
+        "position_x": 925,
+        "position_y": 1200,
+        "desc": "APPROCHE P4"
+      },
+      {
+        "type": "SPEED",
+        "subtype": "SET_SPEED",
+        "speed_percent": 20,
+        "desc": "RALENTIR"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "LINE",
+        "dist": -350,
+        "desc": "POUSSE P4"
+      },
+      {
+        "type": "SPEED",
+        "subtype": "SET_SPEED",
+        "speed_percent": 80,
+        "desc": "VITESSE NORMALE"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "LINE",
+        "dist": 250,
+        "desc": "LIBERE P4"
+      }
+    ]
+  },
+  {
+    "id": 5,
+    "desc": "Pousser PI_GM2",
+    "tasks": [
+      {
+        "type": "MOVEMENT",
+        "subtype": "PATH_TO",
+        "position_x": 410,
+        "position_y": 550,
+        "desc": "PATH_DEVANT NID"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "GO_TO",
+        "position_x": 175,
+        "position_y": 560,
+        "desc": "VERS P1"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "FACE_TO",
+        "position_x": 175,
+        "position_y": 100,
+        "desc": "DOS A P1"
+      },
+      {
+        "type": "SPEED",
+        "subtype": "SET_SPEED",
+        "speed_percent": 20,
+        "desc": "SPEED 50%"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "GO_BACK_TO",
+        "position_x": 175,
+        "position_y": 975,
+        "desc": "POUSSE P1"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "LINE",
+        "dist": 100,
+        "desc": "LIBERE P1"
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "desc": "ATTENTE FIN MATCH",
+    "tasks": [
+      {
+        "type": "MOVEMENT",
+        "subtype": "PATH_TO",
+        "position_x": 450,
+        "position_y": 700,
+        "desc": "PATH_FACE NID"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "ROTATE_ABS_DEG",
+        "angle_deg": -90,
+        "desc": "FACE NID"
+      },
+      {
+        "type": "WAIT",
+        "duration_ms": 20,
+        "desc": "ATTENTE"
+      }
+    ]
+  },
+  {
+    "id": 7,
+    "desc": "Retour Au Nid",
+    "tasks": [
+      {
+        "type": "MOVEMENT",
+        "subtype": "PATH_TO",
+        "position_x": 450,
+        "position_y": 290,
+        "desc": "PATH_NID"
+      }
+    ]
+  }
+]
