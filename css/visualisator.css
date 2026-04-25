@@ -199,10 +199,17 @@ body {
     background: #4caf50;
     color: white;
 }
-#fitBtn {
+#fitBtn, #resetBtn {
     font-size: 16px;
     padding: 4px 30px;
     font-weight: bold;
+}
+#resetBtn {
+    background: #f8d7da;
+    border: 1px solid #c33;
+}
+#resetBtn:hover {
+    background: #f5b1b7;
 }
 .outsideWrapper{
     width:1500px;                    /* defaut zoom 50% (slider / resize / Fit en JS) */

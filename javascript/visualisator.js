@@ -926,6 +926,48 @@ function updatePlayPauseBtn() {
  * Nettoie les traces, le log, le playback state, les tweens.
  * Appele avant de relancer une strategie (BLEU/JAUNE) ou au re-chargement PMX0.
  */
+/**
+ * Reset complet declenche par le bouton "Reset" sous Fit. Efface :
+ * - les traces de deplacement (pathShapes)
+ * - les cercles de detection
+ * - le log d'execution
+ * - l'apercu editeur (incluant previewAlways=false force)
+ * - le state de playback (Suivant/Auto disabled)
+ * - replace le robot a la pose initiale courante
+ */
+function resetAll() {
+    resetTerrainAndPaths();
+    // Force previewAlways=false pour que l'apercu editeur disparaisse aussi
+    if (window.editor) {
+        window.editor.previewAlways = false;
+        if (window.editor._layer) window.editor._layer.removeAllChildren();
+        if (typeof editorApplyMode === 'function') editorApplyMode();
+        // Resync du libelle bouton "Dessiner strat"
+        var btn = document.getElementById('drawStratBtn');
+        if (btn) {
+            btn.textContent = '🖌 Dessiner strat';
+            btn.style.backgroundColor = '';
+            btn.style.color = '';
+        }
+    }
+    // Disable Suivant/Auto (plus rien a jouer tant qu'on n'a pas re-cliqué BLEU/JAUNE)
+    stratSimulator = [];
+    var bN = document.getElementById('pmxNext');   if (bN) bN.disabled = true;
+    var bA = document.getElementById('pmxAuto');   if (bA) bA.disabled = true;
+    // Replace le robot a sa pose initiale (couleur courante)
+    if (window.editor && window.editor.initialPose && pmx) {
+        var p = window.editor.initialPose;
+        var mirror = (matchColor === 'jaune');
+        var x = mirror ? mirrorX(p.x) : p.x;
+        var y = p.y;
+        var theta = mirror ? (Math.PI - p.theta) : p.theta;
+        pmx.x = toCanvasX(x);
+        pmx.y = toCanvasY(y);
+        pmx.rotation = toCanvasRotationDeg(theta);
+    }
+    if (stage) stage.update();
+}
+
 function resetTerrainAndPaths() {
     stopAuto();
     // Clear les traces de deplacement (moveRobot)

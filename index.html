@@ -40,7 +40,10 @@
     </div>
 
     <div class="belowCanvasRow">
-        <button type="button" id="fitBtn" onclick="fitCanvasToBrowser();" title="Ajuster le terrain au max dans la fenetre">Fit</button>
+        <div style="display:flex; flex-direction:column; gap:4px;">
+            <button type="button" id="fitBtn" onclick="fitCanvasToBrowser();" title="Ajuster le terrain au max dans la fenetre">Fit</button>
+            <button type="button" id="resetBtn" onclick="resetAll();" title="Efface toutes les traces (deplacements, apercu editeur, log, detection) et reset le robot a la pose initiale">Reset</button>
+        </div>
 
         <details class="collapsibleBlock" id="configVisuelleBlock">
             <summary>Config visuelle</summary>
