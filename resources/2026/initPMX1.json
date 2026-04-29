@@ -1,7 +1,7 @@
 {
   "x": 230,
   "y": 130,
-  "theta": 1.5707963267948966,
+  "theta": 90,
   "regX": 0,
   "regY": 0,
   "setpos_tasks": [
@@ -9,13 +9,13 @@
       "type": "MOVEMENT",
       "subtype": "LINE",
       "dist": 80,
-      "desc": "avance 80mm avant tirette (setPos C++)"
+      "desc": "Line 80"
     },
     {
       "type": "MOVEMENT",
       "subtype": "LINE",
-      "dist": 200,
-      "desc": "LINE dist=200"
+      "dist": 100,
+      "desc": "LINE dist=100"
     }
   ]
 }

@@ -1010,6 +1010,13 @@ function editorFieldsForTask(task) {
                 fields.push({ key: 'face_y', label: 'face_y (mm)', kind: 'number' });
             }
         }
+        // Flag chain : envoi de la cmd a la Nucleo sans wait (file motion).
+        // Reserve aux primitives (V1 cote runner C++) ; composites/PATH_* refuses.
+        var chainable = ['LINE', 'GO_TO', 'GO_BACK_TO', 'FACE_TO', 'FACE_BACK_TO',
+                         'ROTATE_DEG', 'ROTATE_ABS_DEG', 'ORBITAL_TURN_DEG'];
+        if (chainable.indexOf(st) !== -1) {
+            fields.push({ key: 'chain', label: 'chain (envoi sans wait, empile dans la file Nucleo)', kind: 'checkbox' });
+        }
     } else if (t === 'MANIPULATION') {
         fields.push({ key: 'action_id', label: 'action_id' });
     } else if (t === 'ELEMENT') {
@@ -1065,6 +1072,12 @@ function editorRenderEditPanel() {
             html += '<textarea data-edit-field="' + f.key + '" style="width:650px; height:50px; font-size:20px;">';
             html += editorEscapeHtml(txt);
             html += '</textarea></label></div>';
+        } else if (f.kind === 'checkbox') {
+            var checked = (v === true) ? ' checked' : '';
+            html += '<div style="margin-top:2px;"><label>';
+            html += '<input type="checkbox" data-edit-field="' + f.key + '"' + checked + '/> ';
+            html += editorEscapeHtml(f.label);
+            html += '</label></div>';
         } else {
             var type = (f.kind === 'number') ? 'number' : 'text';
             var width = (type === 'number') ? 150 : 400;
@@ -1083,8 +1096,10 @@ function editorRenderEditPanel() {
 
     // input = maj state live + re-render canvas (sans rebuild liste => pas de perte focus)
     body.querySelectorAll('[data-edit-field]').forEach(function (inp) {
-        inp.addEventListener('input', function () {
-            editorApplyFieldEdit(task, this.dataset.editField, this.value);
+        var liveEvt = (inp.type === 'checkbox') ? 'change' : 'input';
+        inp.addEventListener(liveEvt, function () {
+            var v = (this.type === 'checkbox') ? this.checked : this.value;
+            editorApplyFieldEdit(task, this.dataset.editField, v);
             editorRenderLayer();
         });
         // change = perte focus => resync la liste (libelle mis a jour)
@@ -1110,6 +1125,14 @@ function editorApplyFieldEdit(task, key, val) {
     }
     if (key === 'forward' || key === 'turn_right') {
         task[key] = (val === 'true' || val === '1');
+        editorMarkDirty();
+        return;
+    }
+    if (key === 'chain') {
+        // val = booleen depuis le checkbox. On omet la cle si false pour
+        // garder le JSON propre (default cote C++ = false).
+        if (val === true) task[key] = true;
+        else delete task[key];
         editorMarkDirty();
         return;
     }
@@ -1696,11 +1719,11 @@ function editorExportStrategy() {
 
 function editorExportInit() {
     var p = window.editor.initialPose;
-    // Format Esial enrichi : { x, y, theta (rad), regX, regY, setpos_tasks[] }
+    // Format Esial enrichi : { x, y, theta (deg), regX, regY, setpos_tasks[] }
     var obj = {
         x: p.x,
         y: p.y,
-        theta: p.theta,
+        theta: editorRound2(p.theta * 180 / Math.PI),
         regX: 0,
         regY: 0,
         setpos_tasks: Array.isArray(window.editor.setposTasks) ? window.editor.setposTasks : []
@@ -1774,10 +1797,10 @@ function editorOnLoadInitFile(ev) {
         catch (err) { alert('JSON invalide : ' + err.message); return; }
         if (typeof data.x !== 'number' || typeof data.y !== 'number'
                 || typeof data.theta !== 'number') {
-            alert('initPMX invalide : il faut { x, y, theta (rad) }.');
+            alert('initPMX invalide : il faut { x, y, theta (deg) }.');
             return;
         }
-        window.editor.initialPose = { x: data.x, y: data.y, theta: data.theta };
+        window.editor.initialPose = { x: data.x, y: data.y, theta: data.theta * Math.PI / 180 };
         // Champ optionnel : tasks jouees AVANT la tirette (defaut [] pour retro-compat)
         window.editor.setposTasks = Array.isArray(data.setpos_tasks) ? data.setpos_tasks : [];
         editorRefreshInitialPoseInputs();
