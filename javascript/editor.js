@@ -61,6 +61,7 @@ function editorClearDirty() {
  */
 function editorInit(init) {
     if (init && typeof init.x === 'number') {
+        // init.theta est deja en rad (converti dans visualisator.js::init() depuis le JSON en deg)
         window.editor.initialPose = {
             x: init.x,
             y: init.y,
@@ -822,6 +823,8 @@ function editorRenderInstructionsList() {
         html += '<label title="Points attendus si succes">points: <input type="number" style="width:60px;" data-instr-meta="points:' + iInstr + '" value="' + editorEscapeAttr(instr.points != null ? instr.points : '') + '"/></label>';
         html += '<label title="Priorite (plus eleve = choisi en premier)">priority: <input type="number" style="width:60px;" data-instr-meta="priority:' + iInstr + '" value="' + editorEscapeAttr(instr.priority != null ? instr.priority : '') + '"/></label>';
         html += '<label title="estimatedDurationSec : duree estimee en secondes (pour gestion du temps restant)">EDSec: <input type="number" step="0.5" style="width:60px;" data-instr-meta="estimatedDurationSec:' + iInstr + '" value="' + editorEscapeAttr(instr.estimatedDurationSec != null ? instr.estimatedDurationSec : '') + '"/></label>';
+        html += '<label title="min_match_sec : ne pas demarrer avant t (chrono match)">min_t: <input type="number" step="0.5" style="width:60px;" data-instr-meta="min_match_sec:' + iInstr + '" value="' + editorEscapeAttr(instr.min_match_sec != null ? instr.min_match_sec : '') + '"/></label>';
+        html += '<label title="max_match_sec : skip l\'instruction si t deja >= cette valeur">max_t: <input type="number" step="0.5" style="width:60px;" data-instr-meta="max_match_sec:' + iInstr + '" value="' + editorEscapeAttr(instr.max_match_sec != null ? instr.max_match_sec : '') + '"/></label>';
         html += '<label title="Flag requis pour que l\'instruction s\'execute (skip sinon)">needed_flag: <input type="text" style="width:120px;" data-instr-meta="needed_flag:' + iInstr + '" value="' + editorEscapeAttr(instr.needed_flag || '') + '"/></label>';
         html += '<label title="Flag leve apres succes de l\'instruction">action_flag: <input type="text" style="width:120px;" data-instr-meta="action_flag:' + iInstr + '" value="' + editorEscapeAttr(instr.action_flag || '') + '"/></label>';
         html += '<label title="Flags a effacer apres succes (separes par virgule)">clear_flags: <input type="text" style="width:160px;" data-instr-meta="clear_flags:' + iInstr + '" value="' + editorEscapeAttr(Array.isArray(instr.clear_flags) ? instr.clear_flags.join(',') : '') + '"/></label>';
@@ -883,7 +886,8 @@ function editorRenderInstructionsList() {
             var instr = window.editor.strategy.instructions[i];
             if (!instr) return;
             var val = this.value;
-            if (field === 'points' || field === 'priority' || field === 'estimatedDurationSec') {
+            if (field === 'points' || field === 'priority' || field === 'estimatedDurationSec'
+                    || field === 'min_match_sec' || field === 'max_match_sec') {
                 if (val === '') { delete instr[field]; }
                 else { var n = parseFloat(val); instr[field] = isNaN(n) ? val : n; }
             } else if (field === 'clear_flags') {
@@ -1025,7 +1029,8 @@ function editorFieldsForTask(task) {
     } else if (t === 'SPEED') {
         fields.push({ key: 'speed_percent', label: 'speed_percent (0..100)', kind: 'number' });
     } else if (t === 'WAIT') {
-        fields.push({ key: 'duration_ms', label: 'duration_ms', kind: 'number' });
+        fields.push({ key: 'duration_ms', label: 'duration_ms (pause relative)', kind: 'number' });
+        fields.push({ key: 'until_match_sec', label: 'until_match_sec (pause absolue chrono match, exclusif avec duration_ms)', kind: 'number' });
     }
     // Champs communs a toutes les tasks (spec §2.3 et §3.3)
     fields.push({ key: 'timeout', label: 'timeout (ms, -1 = aucun)', kind: 'number' });
@@ -1140,17 +1145,20 @@ function editorApplyFieldEdit(task, key, val) {
     // - positions (mm, 2 decimales) / angles (deg, 2 decimales) : editorRound2
     // - distances / entiers (dist, timeout, duration_ms, speed_percent) : arrondi mm/entier
     var decimal2Keys = ['position_x', 'position_y', 'face_x', 'face_y',
-        'angle_deg', 'final_angle_deg', 'rotate_rel_deg'];
+        'angle_deg', 'final_angle_deg', 'rotate_rel_deg', 'until_match_sec'];
     var integerKeys = ['dist', 'timeout', 'duration_ms', 'speed_percent'];
     if (decimal2Keys.indexOf(key) !== -1) {
         if (val === '') { delete task[key]; }
         else { var n1 = parseFloat(val); task[key] = isNaN(n1) ? 0 : editorRound2(n1); }
+        // WAIT : until_match_sec et duration_ms sont mutuellement exclusifs.
+        if (key === 'until_match_sec' && val !== '') delete task.duration_ms;
         editorMarkDirty();
         return;
     }
     if (integerKeys.indexOf(key) !== -1) {
         if (val === '') { delete task[key]; }
         else { var n2 = parseFloat(val); task[key] = isNaN(n2) ? 0 : Math.round(n2); }
+        if (key === 'duration_ms' && val !== '') delete task.until_match_sec;
         editorMarkDirty();
         return;
     }
@@ -1901,7 +1909,8 @@ function editorLoadPreconfig(suffix, cb) {
             try {
                 var data = JSON.parse(script2);
                 if (typeof data.x === 'number') {
-                    window.editor.initialPose = { x: data.x, y: data.y, theta: data.theta };
+                    // theta du JSON est en degres -> conversion en rad pour le state interne
+                    window.editor.initialPose = { x: data.x, y: data.y, theta: data.theta * Math.PI / 180 };
                     window.editor.setposTasks = Array.isArray(data.setpos_tasks) ? data.setpos_tasks : [];
                     editorRefreshInitialPoseInputs();
                     editorUpdateRobotFromInitialPose();

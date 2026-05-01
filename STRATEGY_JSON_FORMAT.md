@@ -90,8 +90,10 @@ Array d'**instructions**. Chaque instruction contient une liste ordonnée de
 | `needed_flag` | string | optionnel | Instruction skippée si ce flag n'est pas actif |
 | `action_flag` | string | optionnel | Flag levé après succès de l'instruction |
 | `clear_flags` | array<string> | optionnel | Flags à effacer après succès |
+| `min_match_sec` | float | optionnel | Bloque le démarrage tant que `chrono < min_match_sec` (cf. §2.10) |
+| `max_match_sec` | float | optionnel | Skip l'instruction si `chrono ≥ max_match_sec` (cf. §2.10) |
 
-Voir §3 pour la sémantique des flags.
+Voir §3 pour la sémantique des flags, §2.10 pour le chrono match.
 
 ### 2.3 Champs d'une task
 
@@ -191,15 +193,42 @@ Change la vitesse max de l'asserv.
 
 ### 2.9 WAIT
 
-Pause temporelle. **Pas de `subtype`.**
+Pause temporelle. **Pas de `subtype`.** Deux modes mutuellement exclusifs :
 
 ```json
-{ "type": "WAIT", "duration_ms": 500 }
+{ "type": "WAIT", "duration_ms": 500 }              // pause relative (sleep)
+{ "type": "WAIT", "until_match_sec": 80 }           // pause absolue (chrono match)
 ```
 
 | Champ | Description |
 |---|---|
-| `duration_ms` | Pause en ms, `sleep_for(duration_ms)` |
+| `duration_ms` | Pause relative en ms, `sleep_for(duration_ms)` |
+| `until_match_sec` | Bloque jusqu'à ce que le chrono match atteigne cette valeur (en secondes). Si déjà dépassé : log warn + skip. Mutuellement exclusif avec `duration_ms`. |
+
+### 2.10 Chrono match (gates temporels)
+
+Le runner C++ partage avec la table un **chrono match** unique (`Robot::chrono()`)
+démarré au retrait de la tirette. Trois moyens d'utiliser ce temps :
+
+- **Task `WAIT { until_match_sec: T }`** (§2.9) : pause à l'intérieur d'une instruction.
+- **Instruction `min_match_sec: T`** : le runner attend `t ≥ T` avant de démarrer
+  l'instruction (idéal pour planifier une séquence "fin de match").
+- **Instruction `max_match_sec: T`** : si `t ≥ T` à l'évaluation, l'instruction est
+  skippée (sécurité pour ne pas démarrer une longue séquence trop tard).
+
+```json
+{
+  "id": 99,
+  "desc": "Bonus presence Home Zone",
+  "min_match_sec": 95,
+  "tasks": [
+    { "type": "MOVEMENT", "subtype": "GO_TO", "position_x": 200, "position_y": 200 }
+  ]
+}
+```
+
+Côté simulateur, un chrono **simulé** (mis à l'échelle par le slider de vitesse de
+playback) joue le même rôle : permet de tester la chronologie sans match réel.
 
 ---
 

@@ -256,26 +256,106 @@ var timestampLog;
 // Temps de base pour les animations (ms). Modifiables via le slider "Vitesse
 // playback" via setPlaybackSpeedFactor() : les temps effectifs sont divises par
 // le facteur (factor=2 => deux fois plus rapide).
+// Defauts pour les durees d'animation hors-task (init/teleport). Pendant le
+// playback, ces valeurs sont remplacees par celles calculees a partir de la
+// vitesse physique simulee du robot (simRobotSpeedMmPerSec) avant chaque
+// task (cf. applyTaskTimings dans playSimulatorInstruction).
 var BASE_ROTATION_TIME = 100;
 var BASE_MOVE_TIME = 600;
 var playbackSpeedFactor = 1;
 var rotationTime = BASE_ROTATION_TIME;
 var moveTime = BASE_MOVE_TIME;
+// Vitesse physique simulee du robot. Change la duree des tasks (et donc
+// l'avancement du chrono match simule). Independant du slider playback.
+var simRobotSpeedMmPerSec = 500;
+var simRobotAngularSpeedDegPerSec = 90;
 function setPlaybackSpeedFactor(factor) {
     factor = parseFloat(factor) || 1;
     if (factor < 0.1) factor = 0.1;
     if (factor > 10) factor = 10;
+    // Si le chrono match simule tourne, rebaser sa reference pour ne pas
+    // faire un saut au changement de facteur (l'horloge derive a vitesse
+    // constante par rapport au wall-clock, sa pente change ici).
+    if (simMatch.epochWallMs !== null) {
+        simMatch.accumulatedSec = simMatchNowSec();
+        simMatch.epochWallMs = performance.now();
+    }
     playbackSpeedFactor = factor;
     rotationTime = BASE_ROTATION_TIME / factor;
     moveTime = BASE_MOVE_TIME / factor;
     var lbl = document.getElementById('playbackSpeedVal');
     if (lbl) lbl.textContent = factor.toFixed(2) + 'x';
 }
+function setSimRobotSpeed(v) {
+    var n = parseFloat(v);
+    if (!isNaN(n) && n > 0) simRobotSpeedMmPerSec = n;
+}
+function setSimRobotAngularSpeed(v) {
+    var n = parseFloat(v);
+    if (!isNaN(n) && n > 0) simRobotAngularSpeedDegPerSec = n;
+}
+
+// ============================================================================
+// Chrono match simule
+//
+// Modele : pendant la lecture (autoPlaying ou step en cours), une "epoch"
+// wall-clock est posee. Le temps simule = accumulatedSec + (now - epoch) *
+// playbackSpeedFactor. En pause, on freeze accumulatedSec et on remet
+// epochWallMs a null.
+//
+// Utilise pour evaluer les gates : task WAIT { until_match_sec } et
+// instruction { min_match_sec, max_match_sec }.
+// ============================================================================
+var SIM_MATCH_TOTAL_SEC = 100;  // duree du match (cf. reglement Coupe)
+var simMatch = {
+    accumulatedSec: 0,
+    epochWallMs: null
+};
+function simMatchNowSec() {
+    if (simMatch.epochWallMs === null) return simMatch.accumulatedSec;
+    var dt = (performance.now() - simMatch.epochWallMs) / 1000;
+    return simMatch.accumulatedSec + dt * playbackSpeedFactor;
+}
+function simMatchStart() {
+    if (simMatch.epochWallMs === null) {
+        simMatch.epochWallMs = performance.now();
+        simMatchHudTick();
+    }
+}
+function simMatchPause() {
+    if (simMatch.epochWallMs !== null) {
+        simMatch.accumulatedSec = simMatchNowSec();
+        simMatch.epochWallMs = null;
+        simMatchHudUpdate();
+    }
+}
+function simMatchReset() {
+    simMatch.accumulatedSec = 0;
+    simMatch.epochWallMs = null;
+    simMatchHudUpdate();
+}
+function simMatchHudUpdate() {
+    var hud = document.getElementById('simMatchHud');
+    if (!hud) return;
+    var t = simMatchNowSec();
+    hud.textContent = 'match: ' + t.toFixed(1) + ' / ' + SIM_MATCH_TOTAL_SEC + ' s';
+    hud.style.color = (t >= SIM_MATCH_TOTAL_SEC) ? '#c00'
+        : (t >= SIM_MATCH_TOTAL_SEC - 15) ? '#e07000' : '#444';
+}
+function simMatchHudTick() {
+    simMatchHudUpdate();
+    if (simMatch.epochWallMs !== null) {
+        requestAnimationFrame(simMatchHudTick);
+    }
+}
 var detected = [];
 // Shapes tracant les deplacements du robot (ligne colorees) ; nettoyees au reset.
 var pathShapes = [];
 // Flag : auto en cours (enchaine les tasks). Source de verite unique.
 var autoPlaying = false;
+// Si non null : id d'instruction a skipper jusqu'a en sortir (active par
+// max_match_sec depasse sur la 1ere task d'une instruction).
+var _skipInstructionId = null;
 // Pose logique de playback (PMX mm), independante du tween createjs.
 var playbackPose = null;
 
@@ -293,6 +373,8 @@ function init(currentYear, rotateTable) {
 
     $.getScript(`resources/${currentYear}/initPMX0.json`, function (script) {
         var init = JSON.parse(script);
+        // theta du JSON est en degres (convention uniformisee) -> conversion en rad
+        init.theta = init.theta * Math.PI / 180;
         // Conversion PMX -> canvas pour init (x,y en coord PMX dans le JSON)
         init._cx = toCanvasX(init.x);
         init._cy = toCanvasY(init.y);
@@ -786,11 +868,20 @@ function flattenStrategy(strategy) {
     if (!Array.isArray(strategy)) return flat;
     strategy.forEach(function (instruction) {
         if (!instruction || !Array.isArray(instruction.tasks)) return;
-        instruction.tasks.forEach(function (task) {
+        instruction.tasks.forEach(function (task, idx) {
             var entry = Object.assign({}, task);
             entry._instructionId = instruction.id;
             entry._instructionDesc = instruction.desc;
             entry._displayLabel = task.desc || instruction.desc || '';
+            // Gates instruction-level : portees uniquement sur la 1ere task de
+            // l'instruction. Le runtime memorise alors une "instruction skip"
+            // pour propager max_match_sec aux tasks suivantes du meme bloc.
+            if (idx === 0) {
+                if (instruction.min_match_sec !== undefined)
+                    entry._min_match_sec = instruction.min_match_sec;
+                if (instruction.max_match_sec !== undefined)
+                    entry._max_match_sec = instruction.max_match_sec;
+            }
             flat.push(entry);
         });
     });
@@ -881,6 +972,8 @@ function applyColorFilter(color) {
 function teleportToInit(mirror) {
     $.getScript(`resources/${currentYear}/initPMX0.json`, function (script) {
         var init = JSON.parse(script);
+        // theta du JSON est en degres (convention uniformisee) -> conversion en rad
+        init.theta = init.theta * Math.PI / 180;
         var x = mirror ? mirrorX(init.x) : init.x;
         var y = init.y;
         var theta = mirror ? (Math.PI - init.theta) : init.theta;
@@ -898,6 +991,7 @@ function teleportToInit(mirror) {
  */
 function pauseAuto() {
     autoPlaying = false;
+    simMatchPause();
     updatePlayPauseBtn();
 }
 
@@ -907,6 +1001,7 @@ function pauseAuto() {
  */
 function stopAuto() {
     autoPlaying = false;
+    simMatchPause();
     if (typeof createjs !== 'undefined' && pmx) {
         createjs.Tween.removeTweens(pmx);
     }
@@ -994,6 +1089,8 @@ function resetTerrainAndPaths() {
     // Reset index strat + pose logique de playback
     stratIndex = 0;
     playbackPose = null;
+    _skipInstructionId = null;
+    simMatchReset();
     if (stage) stage.update();
     // Re-render editor layer (efface eventuels vestiges + redessine proprement)
     if (typeof editorRenderLayer === 'function') editorRenderLayer();
@@ -1024,6 +1121,8 @@ function loadDefaultStrat(color) {
         }
         $.getScript(`resources/${currentYear}/initPMX0.json`, function (script2) {
             var init = JSON.parse(script2);
+            // theta du JSON est en degres (convention uniformisee) -> conversion en rad
+            init.theta = init.theta * Math.PI / 180;
             if (window.editor) {
                 window.editor.initialPose = { x: init.x, y: init.y, theta: init.theta };
                 window.editor.setposTasks = Array.isArray(init.setpos_tasks) ? init.setpos_tasks : [];
@@ -1113,6 +1212,88 @@ function isBackwardTask(task) {
     if (st === 'LINE' && (task.dist || 0) < 0) return true;
     if (st === 'ORBITAL_TURN_DEG' && task.forward === false) return true;
     return false;
+}
+
+/**
+ * Difference angulaire (radians) entre 2 angles, ramenee dans [0, π].
+ */
+function angDeltaRad(from, to) {
+    var d = to - from;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    return Math.abs(d);
+}
+
+/**
+ * Calcule la duree simulee d'une task en ms (avant scaling par
+ * playbackSpeedFactor). Decompose en {moveMs, rotMs} pour que les tweens
+ * createjs (qui exposent moveTime/rotationTime globaux) puissent etre
+ * regles proportionnellement.
+ *
+ * - LINE / GO_TO* / MOVE_*_TO / PATH_* : dist / simRobotSpeedMmPerSec
+ *   + pre-rotation pour faire face au heading.
+ * - ROTATE_* / FACE_* : pure rotation, dist=0.
+ * - ORBITAL_TURN_DEG : arc = R * angle, le tout en moveMs (la rotation est
+ *   embarquee dans l'arc).
+ * - MANUAL_PATH : somme des longueurs de segments + 1 pre-rotation par seg.
+ * - Composites _AND_* : pre-rotation + move + post-rotation.
+ *
+ * Plancher 80 ms/task pour eviter les flashs invisibles sur les tres
+ * petites tasks.
+ */
+function computeTaskTimings(task, fromX, fromY, fromTheta, target) {
+    var v = simRobotSpeedMmPerSec;
+    var w = simRobotAngularSpeedDegPerSec;
+    var rad2deg = 180 / Math.PI;
+    var rotMsFromRad = function (rad) { return 1000 * (rad * rad2deg) / w; };
+    var moveMsFromMm = function (mm) { return 1000 * mm / v; };
+
+    if (!task || task.type !== 'MOVEMENT') {
+        return { moveMs: 0, rotMs: 0 };
+    }
+    var st = task.subtype || '';
+
+    if (st === 'LINE') {
+        return { moveMs: moveMsFromMm(Math.abs(task.dist || 0)), rotMs: 0 };
+    }
+    if (st === 'ORBITAL_TURN_DEG') {
+        var R = 128;
+        var ang = Math.abs(task.angle_deg || 0);
+        var arc = R * ang * Math.PI / 180;
+        return { moveMs: moveMsFromMm(arc), rotMs: 0 };
+    }
+    if (st === 'MANUAL_PATH' && Array.isArray(task.waypoints) && task.waypoints.length > 0) {
+        var totalDist = 0, totalRotRad = 0;
+        var px = fromX, py = fromY, ptheta = fromTheta;
+        task.waypoints.forEach(function (wp) {
+            var dx = wp[0] - px, dy = wp[1] - py;
+            totalDist += Math.hypot(dx, dy);
+            var heading = Math.atan2(dy, dx);
+            totalRotRad += angDeltaRad(ptheta, heading);
+            px = wp[0]; py = wp[1]; ptheta = heading;
+        });
+        return { moveMs: moveMsFromMm(totalDist), rotMs: rotMsFromRad(totalRotRad) };
+    }
+    // Pures rotations
+    if (st === 'ROTATE_DEG' || st === 'ROTATE_ABS_DEG'
+            || st === 'FACE_TO' || st === 'FACE_BACK_TO') {
+        var rrad = target ? angDeltaRad(fromTheta, target.theta) : 0;
+        return { moveMs: 0, rotMs: rotMsFromRad(rrad) };
+    }
+    // Deplacements (simples ou composites _AND_*)
+    var dist = target ? Math.hypot(target.x - fromX, target.y - fromY) : 0;
+    var totalRot = 0;
+    if (target) {
+        if (st.indexOf('_AND_') !== -1) {
+            // pre-rotation vers heading + post-rotation vers target.theta
+            var heading = Math.atan2(target.y - fromY, target.x - fromX);
+            totalRot = angDeltaRad(fromTheta, heading) + angDeltaRad(heading, target.theta);
+        } else {
+            // Pre-rotation simple : fromTheta -> target.theta (= heading)
+            totalRot = angDeltaRad(fromTheta, target.theta);
+        }
+    }
+    return { moveMs: moveMsFromMm(dist), rotMs: rotMsFromRad(totalRot) };
 }
 
 /**
@@ -1295,6 +1476,8 @@ function taskSummary(task) {
         parts.push(task.item_id);
     } else if (task.type === 'SPEED' && task.speed_percent !== undefined) {
         parts.push(task.speed_percent + '%');
+    } else if (task.type === 'WAIT' && task.until_match_sec !== undefined) {
+        parts.push('until t=' + task.until_match_sec + 's');
     } else if (task.type === 'WAIT' && task.duration_ms !== undefined) {
         parts.push(task.duration_ms + 'ms');
     }
@@ -1306,6 +1489,42 @@ function taskSummary(task) {
  */
 async function playSimulatorInstruction(task, divId, auto = false) {
     var dataDiv = document.getElementById(divId);
+
+    // ===== Gates chrono match (sim) =====
+    // Si on est en mode "skip instruction" et que la task fait partie de la
+    // meme instruction : on saute (pas de log, pas de delay) et on enchaine.
+    if (_skipInstructionId !== null && task._instructionId === _skipInstructionId) {
+        if (autoPlaying) nextInstruction(true);
+        return;
+    }
+    _skipInstructionId = null;
+    // max_match_sec sur la 1ere task d'une instruction : si chrono deja
+    // depasse, marquer l'instruction a skipper et zapper.
+    if (task._max_match_sec !== undefined && simMatchNowSec() >= task._max_match_sec) {
+        dataDiv.insertAdjacentHTML('beforeend',
+            '<em style="color:#888;">[skip instr ' + task._instructionId
+            + ' : t=' + simMatchNowSec().toFixed(1) + 's >= max_match_sec='
+            + task._max_match_sec + 's]</em><br>');
+        dataDiv.scrollTop = dataDiv.scrollHeight;
+        _skipInstructionId = task._instructionId;
+        if (autoPlaying) nextInstruction(true);
+        return;
+    }
+    // min_match_sec : attendre que le chrono atteigne la cible avant de
+    // commencer l'instruction. simMatchNowSec() avance avec le wall-clock x
+    // playbackSpeedFactor, donc on dort wallMs = (target - now) / factor * 1000.
+    if (task._min_match_sec !== undefined) {
+        var deltaSim = task._min_match_sec - simMatchNowSec();
+        if (deltaSim > 0) {
+            var wallMs = deltaSim * 1000 / (playbackSpeedFactor || 1);
+            dataDiv.insertAdjacentHTML('beforeend',
+                '<em style="color:#0a0;">[wait min_match_sec=' + task._min_match_sec
+                + 's, attente ' + deltaSim.toFixed(1) + 's]</em><br>');
+            dataDiv.scrollTop = dataDiv.scrollHeight;
+            await sleep(wallMs);
+        }
+    }
+
     var label = task._displayLabel || task.desc || '';
     dataDiv.insertAdjacentHTML('beforeend',
         '<strong>' + label + '</strong> : ' + taskSummary(task) + '<br>');
@@ -1321,15 +1540,39 @@ async function playSimulatorInstruction(task, divId, auto = false) {
     // independante du tween) pour que "Suivant" fonctionne en sequence meme
     // lorsque le tween n'est pas termine. On passe aussi fromX/fromY a moveRobot
     // pour que la ligne de trace + le tween partent de la pose logique.
+    //
+    // Duree calculee a partir de la vitesse simulee (simRobotSpeedMmPerSec /
+    // simRobotAngularSpeedDegPerSec) puis divisee par playbackSpeedFactor pour
+    // obtenir les durees wall-clock des tweens createjs.
+    var taskMoveSimMs = 0, taskRotSimMs = 0;
     if (task.type === 'MOVEMENT') {
         if (!playbackPose) playbackPose = currentPmxPose();
         var fromX = playbackPose.x, fromY = playbackPose.y;
         var target = computeTaskTarget(task, playbackPose.x, playbackPose.y, playbackPose.theta);
         if (target !== null) {
+            var timings = computeTaskTimings(task, fromX, fromY, playbackPose.theta, target);
+            taskMoveSimMs = timings.moveMs;
+            taskRotSimMs = timings.rotMs;
+            // Application aux globals utilises par les fonctions d'animation.
+            // MANUAL_PATH : rotationTime sera utilise N fois (1 par segment),
+            //              donc on divise rotMs par N. moveTime = total move.
+            // Composites _AND_ : rotationTime utilise 2 fois (pre + post).
+            // Autres : rotationTime = pre-rotation seule.
+            var st = task.subtype || '';
+            var rotDivisor = 1;
+            if (st === 'MANUAL_PATH' && Array.isArray(task.waypoints) && task.waypoints.length > 0) {
+                rotDivisor = task.waypoints.length;
+            } else if (st.indexOf('_AND_') !== -1) {
+                rotDivisor = 2;
+            }
+            var factor = playbackSpeedFactor || 1;
+            // Plancher 60ms (sinon flash invisible sur tres petites tasks)
+            moveTime = Math.max(60, taskMoveSimMs) / factor;
+            rotationTime = Math.max(40, taskRotSimMs / rotDivisor) / factor;
+
             var strokeColor = strokeColorForTask(task);
             var heading = target.theta;
             var finalRot;
-            var st = task.subtype || '';
             var dashed = isBackwardTask(task);
             // MANUAL_PATH : anime chaque segment separement (rotate+move par
             // waypoint) pour eviter le crab walk.
@@ -1366,18 +1609,23 @@ async function playSimulatorInstruction(task, divId, auto = false) {
         }
     }
 
-    // Pause adaptee : composites +1 rotation, MANUAL_PATH = N segments.
-    // Le WAIT strategique (duration_ms) est egalement divise par le facteur de
-    // vitesse de lecture pour garder une coherence visuelle avec les animations.
-    var delay = (task.type === 'WAIT' && task.duration_ms)
-        ? (task.duration_ms / (playbackSpeedFactor || 1))
-        : (moveTime + rotationTime);
-    var st2 = task.subtype || '';
-    if (task.type === 'MOVEMENT' && st2.indexOf('_AND_') !== -1) {
-        delay += rotationTime;
-    } else if (task.type === 'MOVEMENT' && st2 === 'MANUAL_PATH'
-            && Array.isArray(task.waypoints) && task.waypoints.length > 0) {
-        delay = task.waypoints.length * rotationTime + moveTime;
+    // Calcul du delay (wall-clock ms) avant d'enchainer la prochaine task.
+    // - WAIT until_match_sec : ecart en sim sec / factor (chrono-aware).
+    // - WAIT duration_ms : pause relative / factor.
+    // - MOVEMENT : sim duration calculee (move + rot total) / factor.
+    // - Autres (MANIPULATION, ELEMENT, SPEED) : 100 ms wall-clock (action
+    //   instantanee cote sim, juste pour avoir un retour visuel).
+    var factor = playbackSpeedFactor || 1;
+    var delay;
+    if (task.type === 'WAIT' && task.until_match_sec !== undefined) {
+        var deltaSim = task.until_match_sec - simMatchNowSec();
+        delay = (deltaSim > 0) ? (deltaSim * 1000 / factor) : 0;
+    } else if (task.type === 'WAIT' && task.duration_ms) {
+        delay = task.duration_ms / factor;
+    } else if (task.type === 'MOVEMENT') {
+        delay = Math.max(80, taskMoveSimMs + taskRotSimMs) / factor;
+    } else {
+        delay = 100 / factor;  // MANIPULATION / ELEMENT / SPEED : quasi-instantane
     }
     await sleep(delay);
 
@@ -1484,6 +1732,7 @@ async function autoPlay() {
     if (!stratSimulator) return;
     if (stratIndex >= stratSimulator.length) stratIndex = 0;
     autoPlaying = true;
+    simMatchStart();
     updatePlayPauseBtn();
     nextInstruction(true);
 }
@@ -1496,6 +1745,7 @@ async function autoPlay() {
  */
 function stepNext() {
     autoPlaying = false;
+    simMatchStart();
     updatePlayPauseBtn();
     nextInstruction(false);
 }

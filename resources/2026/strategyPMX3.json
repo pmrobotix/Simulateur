@@ -1,0 +1,47 @@
+[
+  {
+    "id": 1,
+    "desc": "P1 en GM2",
+    "tasks": [
+      {
+        "type": "MOVEMENT",
+        "subtype": "PATH_TO",
+        "position_x": 230,
+        "position_y": 680,
+        "desc": "PATH_TO (230,680)"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "LINE",
+        "dist": 392,
+        "desc": "LINE dist=392"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "LINE",
+        "dist": -160,
+        "desc": "LINE dist=-160"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "desc": "ZC1 ATTENTE RETOUR ZONE",
+    "tasks": [
+      {
+        "type": "MOVEMENT",
+        "subtype": "PATH_TO",
+        "position_x": 800,
+        "position_y": 600,
+        "desc": "PATH_TO (800,600)"
+      },
+      {
+        "type": "MOVEMENT",
+        "subtype": "FACE_TO",
+        "position_x": 100,
+        "position_y": 600,
+        "desc": "FACE_TO (100,600)"
+      }
+    ]
+  }
+]

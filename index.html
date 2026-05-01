@@ -131,6 +131,11 @@
                             style="width:120px; vertical-align:middle;"/>
                         <span id="playbackSpeedVal">1.00x</span>
                     </label>
+                    <span id="simMatchHud"
+                          title="Chrono match simulé (mis à l'échelle par la vitesse de lecture)"
+                          style="font-family:monospace; font-size:13px; font-weight:bold; color:#444; margin-left:6px;">
+                        match: 0.0 / 100 s
+                    </span>
                 </div>
             </div>
 
@@ -138,12 +143,29 @@
             <div class="stratRow" style="margin-top:2px;">
                 <button type="button" onclick="editorLoadPreconfig('PMX0');" title="Charger strategyPMX0.json + initPMX0.json">📦 LOAD PMX0 / INIT0</button>
                 <button type="button" onclick="editorLoadPreconfig('PMX1');" title="Charger strategyPMX1.json + initPMX1.json">📦 LOAD PMX1 / INIT1</button>
+                <button type="button" onclick="editorLoadPreconfig('PMX2');" title="Charger strategyPMX2.json + initPMX2.json">📦 LOAD PMX2 / INIT2</button>
+                <button type="button" onclick="editorLoadPreconfig('PMX3');" title="Charger strategyPMX3.json + initPMX3.json">📦 LOAD PMX3 / INIT3</button>
                 <button type="button" onclick="editorLoadPreconfig('EXEMPLE0');" title="Demo : toutes les commandes + retour zone depart">📦 LOAD EXEMPLE0</button>
             </div>
 
-            <!-- Legende couleurs traces (repliable) -->
+            <!-- Legende couleurs traces + vitesse simulee (repliable, replie par defaut) -->
             <details style="margin-top:4px; font-size:13px;">
-                <summary style="cursor:pointer; color:#555;">Légende couleurs traces</summary>
+                <summary style="cursor:pointer; color:#555;">Légende couleurs traces &amp; vitesse simulée</summary>
+                <div class="legendColors" style="background:#f5f5f5; padding:4px 6px; border-radius:3px;">
+                    <strong style="color:#444;">Vitesse simulée du robot</strong>
+                    <label style="display:inline-flex; align-items:center; gap:3px; font-size:12px;"
+                           title="Vitesse simulée du robot en mm/s. Influence la durée de chaque task et donc le chrono match simulé.">
+                        v: <input type="number" id="simRobotSpeed" min="50" max="2000" step="50" value="500"
+                            oninput="setSimRobotSpeed(this.value);"
+                            style="width:60px;"/> mm/s
+                    </label>
+                    <label style="display:inline-flex; align-items:center; gap:3px; font-size:12px;"
+                           title="Vitesse angulaire simulée du robot en deg/s. Defaut 90 deg/s (rotation 90° en ~1s, realiste en match).">
+                        ω: <input type="number" id="simRobotAngSpeed" min="20" max="720" step="10" value="90"
+                            oninput="setSimRobotAngularSpeed(this.value);"
+                            style="width:55px;"/> °/s
+                    </label>
+                </div>
                 <div class="legendColors">
                     <span class="legendItem"><span class="legendSwatch" style="background:rgba(0,200,180,1)"></span>GO_TO / GO_BACK_TO</span>
                     <span class="legendItem"><span class="legendSwatch" style="background:rgba(255,20,147,1)"></span>PATH_TO / PATH_BACK / MANUAL_PATH</span>
